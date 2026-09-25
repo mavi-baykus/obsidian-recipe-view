@@ -4,20 +4,83 @@ import Fraction from "fraction.js";
 export const NUMBER = new RegExp(/\d+(([\s-]+\d+)?\/\d+|\.\d+)?/)
 
 /** Matches a whole bunch of common units that you would want to scale in recipes */
-export const UNIT = new RegExp(/tb?sp?s?\.?|tablespoons?|teaspoons?|k?g|(kilo)?grams?|cups?|m?Ls?|millilit(re|er)s?|lit(re|er)s?|(fl.?|fluid)?\s+(oz\.?|ounces?)|pounds?|lbs?\.?|sticks?/i)
+export const UNIT = new RegExp(/tb?sp?s?\.?|tablespoons?|teaspoons?|k?g|(kilo)?grams?|gr\.?|cups?|m?Ls?|millilit(re|er)s?|lit(re|er)s?|lt\.?|((fl\.?|fluid)\s*)?(oz\.?|ounces?)|pounds?|lbs?\.?|sticks?|(su|çay)\s+bardağı|(yemek|tatlı|çay|kahve)\s+kaşığı|kahve\s+fincanı/i)
 
-/** Matches a number followed by some whitespace and a unit */
-export const NUMBER_WITH_UNIT = new RegExp("(?<number>" + NUMBER.source + ")\\s*(?<unit>" + UNIT.source + ")\\b", "ig");
+/** Units that are usually written with fractions rather than decimals */
+const FRACTION_UNIT = new RegExp(/^(tb?sp?s?\.?|tablespoons?|teaspoons?|cups?|sticks?|.*\s(bardağı|kaşığı|fincanı))$/i)
 
-/** Matches a number at the start of a string by itself */
-export const START_NUMBER_ALONE = new RegExp("(?<startnumber>^" + NUMBER.source + ")\\b", "ig");
+/**
+ * Separates the two ends of a range, e.g. 1-2, 520–585, 2 to 3. A hyphen followed by a
+ * fraction is left alone, as "1-1/2" is a mixed number rather than a range.
+ */
+const RANGE_SEPARATOR = "\\s*[\\u2013\\u2014]\\s*|\\s*-\\s*(?!\\d+\\/)|\\s+to\\s+";
+
+/** A unit must not run straight into more letters, e.g. the "g" at the start of "garlic" */
+const UNIT_END = "(?![\\p{L}\\p{N}_])";
+
+/**
+ * Build the regex that matches either a number (or range) at the start of a string, or
+ * otherwise a number (or range) and unit. `extraUnits` are added to the built-in units.
+ */
+function buildQuantityRegex(extraUnits: string[]) {
+    const unit = extraUnits
+        .map((u) => u.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&").replace(/\s+/g, "\\s+"))
+        .concat(UNIT.source)
+        .join("|");
+    const number = NUMBER.source;
+    const range = (name: string) =>
+        `(?<${name}low>${number})(?<${name}sep>${RANGE_SEPARATOR})(?<${name}high>${number})`;
+    return new RegExp([
+        `${range("range")}\\s*(?<rangeunit>${unit})${UNIT_END}`,
+        `^${range("startrange")}\\b`,
+        `(?<number>${number})\\s*(?<unit>${unit})${UNIT_END}`,
+        `(?<startnumber>^${number})\\b`,
+    ].join("|"), "igu");
+}
+
+const quantityRegexCache = new Map<string, RegExp>();
+
+function quantityRegex(extraUnits: string[]) {
+    const key = extraUnits.join("\n");
+    let regex = quantityRegexCache.get(key);
+    if (!regex) {
+        regex = buildQuantityRegex(extraUnits);
+        quantityRegexCache.set(key, regex);
+    }
+    return regex;
+}
 
 /** Matches either a number at the start of a string, or otherwise a number and unit */
-export const QUANTITY = new RegExp(NUMBER_WITH_UNIT.source + "|" + START_NUMBER_ALONE.source, "ig");
+export const QUANTITY = quantityRegex([]);
+
+const UNICODE_FRACTION = new RegExp(
+    "(\\d?)([\\u00BC-\\u00BE\\u2150-\\u215E\\u2189]|[\\u2070\\u00B9\\u00B2\\u00B3\\u2074-\\u2079]+[\\u2044/][\\u2080-\\u2089]+)",
+    "g"
+);
+
+/**
+ * Convert unicode fractions (e.g. ½ or ¹⁄₂) to ASCII (1/2) so they can be matched as
+ * quantities, separating them from a preceding digit so that "2½" becomes "2 1/2" rather
+ * than "21/2". All other characters are left untouched.
+ */
+export function normaliseFractions(str: string) {
+    return str
+        .replace(UNICODE_FRACTION, (_match, digit: string, fraction: string) =>
+            (digit ? digit + " " : "") + fraction.normalize("NFKD")
+        )
+        .replaceAll("⁄", "/");
+}
 
 export enum QtyFormatType {
     FRACTION,
     DECIMAL,
+}
+
+export interface QuantityMatch {
+    index: number;
+    length: number;
+    value: { value: Fraction; format: QtyFormatType };
+    unit: string | null;
 }
 
 /**
@@ -61,11 +124,11 @@ export function reUnicodeFractions(str: string) {
  * tablespoons/teaspoons/cups/sticks will be fractions, and all other units (or no unit
  * specified) will be decimals.
  */
-function quantityStringsToValue(str: string, unit?: string) {
+function quantityStringsToValue(str: string, unit: string | null) {
     return {
         value: new Fraction(str.replace(/[-\s]+/g, " ")),
         format: (str.includes("/") ||
-            unit?.match(/tablespoons?|teaspoons?|tb?sp?s?\.?|cups?|sticks?/i) ||
+            unit?.match(FRACTION_UNIT) ||
             (!unit && !str.includes(".")))
             ? QtyFormatType.FRACTION : QtyFormatType.DECIMAL,
     }
@@ -73,19 +136,43 @@ function quantityStringsToValue(str: string, unit?: string) {
 
 /**
  * Match all of the quantities present in a string, and return an array of objects
- * describing them.
- * 
- * Requires unicode fractions to have already been normalised to ASCII, which involves
- * NFKD normalisation + replacing \u2044 with a slash.
+ * describing them. Each end of a range (e.g. "520\u2013585 g") is returned as a separate
+ * quantity, with the unit attached to the second one.
+ *
+ * Requires unicode fractions to have already been normalised to ASCII with
+ * `normaliseFractions`.
  */
-export function matchQuantities(str: string) {
-    return Array.from(str.matchAll(QUANTITY)).map((match) => {
-        return {
-            index: match.index,
-            length: match[0].length,
-            value: quantityStringsToValue(match.groups!.number || match.groups!.startnumber, match.groups!.unit),
-            unit: match.groups!.unit || null,
+export function matchQuantities(str: string, extraUnits: string[] = []): QuantityMatch[] {
+    return Array.from(str.matchAll(quantityRegex(extraUnits))).flatMap((match) => {
+        const groups = match.groups!;
+        const index = match.index!;
+        const low = groups.rangelow ?? groups.startrangelow;
+        if (low !== undefined) {
+            const high = groups.rangehigh ?? groups.startrangehigh;
+            const highIndex = low.length + (groups.rangesep ?? groups.startrangesep).length;
+            const unit = groups.rangeunit?.trim() || null;
+            return [
+                {
+                    index: index,
+                    length: low.length,
+                    value: quantityStringsToValue(low, unit),
+                    unit: null,
+                },
+                {
+                    index: index + highIndex,
+                    length: match[0].length - highIndex,
+                    value: quantityStringsToValue(high, unit),
+                    unit: unit,
+                },
+            ];
         }
+        const unit = groups.unit?.trim() || null;
+        return [{
+            index: index,
+            length: match[0].length,
+            value: quantityStringsToValue(groups.number ?? groups.startnumber, unit),
+            unit: unit,
+        }];
     });
 }
 

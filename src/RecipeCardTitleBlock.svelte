@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { App, MarkdownRenderer, TFile } from "obsidian";
+	import { App, MarkdownRenderer, TFile, setIcon } from "obsidian";
 	import { RecipeView } from "./recipe-view";
 
 	export let thumbnailPath: string | undefined;
@@ -9,6 +9,10 @@
 	export let app: App;
 	export let file: TFile;
 	export let view: RecipeView;
+
+	function icon(node: HTMLElement, name: string) {
+		setIcon(node, name);
+	}
 
 	function formatFrontmatterValue(key: string, value: any) {
 		// See if it's a URL
@@ -65,7 +69,15 @@
 		/>
 	{/if}
 	<div class="metadata">
-		<div class="inline-title">{title}</div>
+		<div class="title-row">
+			<div class="inline-title">{title}</div>
+			<button
+				class="clickable-icon open-note"
+				aria-label="Open as note"
+				use:icon={"file-text"}
+				on:click={() => view.plugin.setMarkdownView(view.leaf)}
+			></button>
+		</div>
 		<div class="frontmatter">
 			{#if frontmatter}
 				{#each Object.entries(frontmatter) as [key, value]}
@@ -99,6 +111,22 @@
 		flex: 0 0 var(--thumbnail-size);
 		margin-inline-end: var(--size-4-4);
 		border-radius: var(--radius-s);
+	}
+	.metadata {
+		flex: 1 1 auto;
+		align-self: stretch;
+	}
+	.title-row {
+		display: flex;
+		flex-direction: row;
+		align-items: flex-start;
+		gap: var(--size-4-2);
+	}
+	.title-row .inline-title {
+		flex: 1 1 auto;
+	}
+	.open-note {
+		flex: 0 0 auto;
 	}
 	.frontmatter {
 		display: flex;

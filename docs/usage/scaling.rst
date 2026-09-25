@@ -11,8 +11,11 @@ Easily scale the ingredient quantities in your recipes using the widget at the t
 * ½ cup – a unicode fraction
 * 3.5 litres – a decimal number
 * 2 3/4 sticks – a mixed text number
-* 1 ¾ kg – a mixed unicode number (requires a space in between the integral and fractional part)
+* 1 ¾ kg or 1¾ kg – a mixed unicode number (with or without a space)
 * 1-1/4 oz. – a mixed number separated by a dash (both text and unicode work)
+* 520–585 g, 1-2 eggs, 2 to 3 cups – a range (both ends are scaled)
+
+Built-in units include common English and metric units, plus Turkish measures (su bardağı, çay bardağı, yemek kaşığı, tatlı kaşığı, çay kaşığı, kahve kaşığı, kahve fincanı, gr, lt). Add your own under *Additional units* in the plugin settings, separated by commas (e.g. ``cloves, pinch``).
 
 Scaling display
 ***************

@@ -1,13 +1,22 @@
 import RecipeViewPlugin from "./main";
-import { EditableFileView, Keymap, TFile, WorkspaceLeaf } from "obsidian";
+import { Component, EditableFileView, Keymap, TFile, ViewStateResult, WorkspaceLeaf } from "obsidian";
 import RecipeCard from "./RecipeCard.svelte"
 import { parseRecipeMarkdown } from "./parsing";
+import { MarkdownModeState, parseList, pickMarkdownMode, stripInlineCodeTokens } from "./helpers";
 
 export const VIEW_TYPE_RECIPE = "recipe-view";
 
 export class RecipeView extends EditableFileView {
     plugin: RecipeViewPlugin
     content?: RecipeCard
+    // The mode (reading/editing) the note was in before switching to recipe view
+    returnState: MarkdownModeState | null = null
+    // Owns everything rendered from the markdown, so it can be unloaded on re-render
+    renderComponent?: Component
+    renderedText?: string
+    renderCount = 0
+    // Kept across re-renders of the same note
+    scaleNum = 1
 
     constructor(leaf: WorkspaceLeaf, plugin: RecipeViewPlugin) {
         super(leaf);
@@ -26,8 +35,23 @@ export class RecipeView extends EditableFileView {
         return "chef-hat";
     }
 
+    getState() {
+        return { ...super.getState(), returnState: this.returnState };
+    }
+
+    async setState(state: unknown, result: ViewStateResult): Promise<void> {
+        if (state && typeof state == "object" && "returnState" in state) {
+            this.returnState = pickMarkdownMode((state as Record<string, unknown>).returnState);
+        }
+        await super.setState(state, result);
+    }
+
     async onOpen() {
-        this.renderRecipe();
+        this.addAction("file-text", "Open as note", () => this.plugin.setMarkdownView(this.leaf));
+        // Re-render when the note is changed elsewhere, e.g. in another pane or by sync
+        this.registerEvent(this.app.metadataCache.on("changed", (file, data) => {
+            if (file == this.file && data != this.renderedText) this.renderRecipe();
+        }));
         // These events can be registered directly as they'll be cleaned up
         // when `containerEl` goes out of scope
         this.containerEl.on('mouseover', 'a.internal-link', (e, el) => {
@@ -55,27 +79,58 @@ export class RecipeView extends EditableFileView {
     }
 
     async onClose() {
-        this.content?.$destroy();
+        this.clearRecipe();
     }
 
     async onLoadFile(file: TFile): Promise<void> {
-        super.onLoadFile(file);
-        this.renderRecipe();
-        return;
+        await super.onLoadFile(file);
+        await this.renderRecipe();
+    }
+
+    async onUnloadFile(file: TFile): Promise<void> {
+        this.clearRecipe();
+        this.renderedText = undefined;
+        this.scaleNum = 1;
+        await super.onUnloadFile(file);
+    }
+
+    clearRecipe() {
+        this.content?.$destroy();
+        this.content = undefined;
+        if (this.renderComponent) {
+            this.removeChild(this.renderComponent);
+            this.renderComponent = undefined;
+        }
+        this.contentEl.empty();
     }
 
     async renderRecipe(): Promise<boolean> {
-        if (!this.file) { return false }
-        const text = await this.app.vault.cachedRead(this.file!);
-        const metadata = await this.app.metadataCache.getFileCache(this.file!);
-        const parsedRecipe = parseRecipeMarkdown(this.plugin, text, this.file!.path, this);
+        const file = this.file;
+        if (!file) { return false }
+        const renderId = ++this.renderCount;
+        const text = await this.app.vault.cachedRead(file);
+        // Another render started, or a different file was opened, while reading this one
+        if (renderId != this.renderCount || file != this.file) { return false }
+
+        this.clearRecipe();
+        this.renderedText = text;
+        this.renderComponent = this.addChild(new Component());
+        const metadata = this.app.metadataCache.getFileCache(file);
+        const parsedRecipe = parseRecipeMarkdown(
+            this.plugin,
+            stripInlineCodeTokens(text, parseList(this.plugin.settings.hiddenInlineCode)),
+            file.path,
+            this.renderComponent,
+        );
         this.content = new RecipeCard({
             target: this.contentEl,
             props: {
                 parsedRecipe: parsedRecipe,
-                file: this.file!,
+                file: file,
                 metadata: metadata || undefined,
                 view: this,
+                initialScale: this.scaleNum,
+                onScaleChange: (scale: number) => { this.scaleNum = scale },
             }
         });
 

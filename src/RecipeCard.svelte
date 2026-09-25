@@ -19,11 +19,14 @@
 	export let metadata: CachedMetadata | undefined;
 	export let file: TFile;
 	export let view: RecipeView;
+	export let initialScale = 1;
+	export let onScaleChange: ((scale: number) => void) | undefined = undefined;
 
 	// Recipe scaling - create store here to pass to all children via ctx
-	let scaleNum = 1;
+	let scaleNum = initialScale;
 	let qtyScale: Fraction;
 	$: parsedRecipe?.qtyScaleStore.set(qtyScale);
+	$: if (scaleNum) onScaleChange?.(scaleNum);
 
 	// Determining the recipe format
 	let containerWidth: number;

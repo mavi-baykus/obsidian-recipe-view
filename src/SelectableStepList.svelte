@@ -9,6 +9,12 @@
 		return (list as HTMLOListElement).children;
 	}
 
+	// Keep the numbering of lists that don't start at 1, e.g. "8. Next step"
+	function olStart() {
+		const start = (list as HTMLOListElement).getAttribute("start");
+		return start ? parseInt(start) : undefined;
+	}
+
 	function olChild(index: number) {
 		return olChildren().item(index)! as HTMLElement;
 	}
@@ -21,7 +27,7 @@
 {#if kind == "ol"}
 	<!-- means steps is the children of an OL element -->
 	<div>
-		<ol class="recipe-mutex-select">
+		<ol class="recipe-mutex-select" start={olStart()}>
 			{#each olChildren() as _, i}
 				<li>
 					<label>

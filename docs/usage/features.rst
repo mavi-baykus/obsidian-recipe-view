@@ -20,3 +20,12 @@ Features overview
 * 📝 Everything is a note – keep your nicely formatted recipes in the same folders as your scanned magazine clippings
 * 🌏 Cross-link and tag your recipes, link them to notes on technique, keep a baking log in your daily notes, or use Dataview or Kanban to plan out your cooking
 * ☁️ Write them on your laptop, check ingredients in the store on your phone, and cook from them in the kitchen with your iPad
+
+Switching between note and recipe view
+**************************************
+
+* Recipe notes get a chef's hat button in the note header to open them as a recipe card. A note counts as a recipe if it has one of the *Recipe tags* (default ``recipe``, including nested tags like ``#recipe/dessert``) or is in one of the *Recipe folders* set in the plugin settings. The button can also be shown on all notes, or turned off.
+* In recipe view, the "Open as note" button in the header (and next to the recipe title) goes back to the note, in whichever mode it was in before – Reading view, Live Preview or Source mode. This can be changed to always open Reading view or Live Preview.
+* The ribbon icon and the *Toggle between recipe card and markdown* command also switch back and forth.
+* Buttons from other plugins that don't work inside recipe view, like a Buttons plugin inline button ``button-RecipeView`` that runs the toggle command, can be hidden from the recipe card under *Hide in recipe view*.
+* The recipe card updates when the note is changed elsewhere, e.g. in another pane or by sync, keeping the current scale.
