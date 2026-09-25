@@ -2,7 +2,7 @@ import RecipeViewPlugin from "./main";
 import { Component, EditableFileView, Keymap, TFile, ViewStateResult, WorkspaceLeaf } from "obsidian";
 import RecipeCard from "./RecipeCard.svelte"
 import { parseRecipeMarkdown } from "./parsing";
-import { MarkdownModeState, parseList, pickMarkdownMode, stripInlineCodeTokens } from "./helpers";
+import { MarkdownModeState, MarkdownPosition, parseList, pickMarkdownMode, pickMarkdownPosition, stripInlineCodeTokens } from "./helpers";
 
 export const VIEW_TYPE_RECIPE = "recipe-view";
 
@@ -11,6 +11,8 @@ export class RecipeView extends EditableFileView {
     content?: RecipeCard
     // The mode (reading/editing) the note was in before switching to recipe view
     returnState: MarkdownModeState | null = null
+    // Where the cursor and scroll were in the note, to return there
+    returnPosition: MarkdownPosition | null = null
     // Owns everything rendered from the markdown, so it can be unloaded on re-render
     renderComponent?: Component
     renderedText?: string
@@ -36,12 +38,13 @@ export class RecipeView extends EditableFileView {
     }
 
     getState() {
-        return { ...super.getState(), returnState: this.returnState };
+        return { ...super.getState(), returnState: this.returnState, returnPosition: this.returnPosition };
     }
 
     async setState(state: unknown, result: ViewStateResult): Promise<void> {
         if (state && typeof state == "object" && "returnState" in state) {
             this.returnState = pickMarkdownMode((state as Record<string, unknown>).returnState);
+            this.returnPosition = pickMarkdownPosition((state as Record<string, unknown>).returnPosition);
         }
         await super.setState(state, result);
     }

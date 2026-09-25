@@ -47,6 +47,41 @@ export function pickMarkdownMode(state: unknown): MarkdownModeState | null {
     return typeof source == "boolean" ? { mode, source } : { mode };
 }
 
+interface EditorPosition {
+    line: number;
+    ch: number;
+}
+
+/** The parts of a markdown view's ephemeral state that say where the reader was */
+export interface MarkdownPosition {
+    cursor?: { from: EditorPosition; to: EditorPosition };
+    scroll?: number;
+}
+
+function isEditorPosition(p: unknown): p is EditorPosition {
+    return !!p && typeof p == "object"
+        && typeof (p as EditorPosition).line == "number"
+        && typeof (p as EditorPosition).ch == "number";
+}
+
+/**
+ * Pick the cursor and scroll position out of a markdown view's ephemeral state, if it
+ * has them, so the note can be reopened where it was left.
+ */
+export function pickMarkdownPosition(eState: unknown): MarkdownPosition | null {
+    if (!eState || typeof eState != "object") return null;
+    const { cursor, scroll } = eState as Record<string, unknown>;
+    const position: MarkdownPosition = {};
+    if (cursor && typeof cursor == "object") {
+        const { from, to } = cursor as Record<string, unknown>;
+        if (isEditorPosition(from) && isEditorPosition(to)) {
+            position.cursor = { from: { line: from.line, ch: from.ch }, to: { line: to.line, ch: to.ch } };
+        }
+    }
+    if (typeof scroll == "number") position.scroll = scroll;
+    return Object.keys(position).length > 0 ? position : null;
+}
+
 /**
  * The mode state to open a markdown view with when leaving recipe view. For "previous",
  * that is the mode the note was in before switching to recipe view, if known; an empty

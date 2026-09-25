@@ -4,6 +4,7 @@ import {
     markdownModeForReturn,
     parseList,
     pickMarkdownMode,
+    pickMarkdownPosition,
     stripInlineCodeTokens,
 } from './helpers';
 
@@ -62,6 +63,22 @@ describe('choosing the markdown mode to return to', () => {
             .toStrictEqual({ mode: "preview" });
         expect(markdownModeForReturn("live", { mode: "preview" }))
             .toStrictEqual({ mode: "source", source: false });
+    });
+});
+
+describe('remembering the position in the note', () => {
+    test('keeps the cursor and scroll of an editing view', () => {
+        const cursor = { from: { line: 30, ch: 3 }, to: { line: 31, ch: 0 } };
+        expect(pickMarkdownPosition({ cursor, scroll: 4.2, focus: true }))
+            .toStrictEqual({ cursor, scroll: 4.2 });
+    });
+    test('keeps the scroll of a reading view', () => {
+        expect(pickMarkdownPosition({ scroll: 12 })).toStrictEqual({ scroll: 12 });
+    });
+    test('ignores malformed or missing positions', () => {
+        expect(pickMarkdownPosition({ cursor: { from: { line: 1 } }, scroll: "top" })).toBeNull();
+        expect(pickMarkdownPosition({})).toBeNull();
+        expect(pickMarkdownPosition(null)).toBeNull();
     });
 });
 

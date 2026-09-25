@@ -238,8 +238,9 @@ Each phase can be shipped on its own and keeps build, tests and lint green.
 
 Phases 1 and 2 were checked in Obsidian 1.13.7 with the Buttons plugin (0.9.13) and both
 recipe notes: the original build reproduced "Could not get Active View" and `10 ½`; the new
-build round-trips Reading view, Live Preview and Source mode, hides the dead button, and
-scales correctly.
+build round-trips Reading view, Live Preview and Source mode (including from the Buttons
+button in Live Preview, keeping the cursor and scroll position), hides the dead button,
+and scales correctly.
 
 **Distribution:** keep the manifest id `recipe-view` and install the fork through BRAT
 from this repo. The release workflow already builds on tags; GitHub Actions has to be

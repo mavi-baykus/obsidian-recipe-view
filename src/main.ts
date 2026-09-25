@@ -3,7 +3,7 @@ import { App, MarkdownView, Plugin, PluginSettingTab, Setting, TFile, WorkspaceL
 import { RecipeView, VIEW_TYPE_RECIPE } from './recipe-view';
 import store from './store';
 import { WHISK_SVG } from './whisk';
-import { ReturnMode, isRecipeNote, markdownModeForReturn, parseList, pickMarkdownMode } from './helpers';
+import { ReturnMode, isRecipeNote, markdownModeForReturn, parseList, pickMarkdownMode, pickMarkdownPosition } from './helpers';
 
 type HeaderButtonMode = "recipes" | "all" | "off";
 
@@ -154,8 +154,12 @@ export default class RecipeViewPlugin extends Plugin {
 		const state = leaf.view.getState();
 		await leaf.setViewState({
 			type: VIEW_TYPE_RECIPE,
-			// Remember whether the note was in reading view or editing, to return to it
-			state: { file: state.file, returnState: pickMarkdownMode(state) },
+			// Remember whether the note was in reading view or editing, and where, to return to it
+			state: {
+				file: state.file,
+				returnState: pickMarkdownMode(state),
+				returnPosition: pickMarkdownPosition(leaf.getEphemeralState()),
+			},
 			active: true,
 			// @ts-ignore
 			popstate: true,
@@ -165,13 +169,14 @@ export default class RecipeViewPlugin extends Plugin {
 	async setMarkdownView(leaf: WorkspaceLeaf) {
 		const state = leaf.view.getState();
 		const previous = leaf.view instanceof RecipeView ? leaf.view.returnState : null;
+		const position = leaf.view instanceof RecipeView ? leaf.view.returnPosition : null;
 		await leaf.setViewState({
 			type: "markdown",
 			state: { file: state.file, ...markdownModeForReturn(this.settings.returnMode, previous) },
 			active: true,
 			// @ts-ignore
 			popstate: true,
-		})
+		}, position ?? undefined)
 	}
 
 	async loadSettings() {
