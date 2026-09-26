@@ -53,7 +53,7 @@ Click or tab elsewhere to stop highlighting the last-changed ingredient.
 
 Selectable step lists
 *********************
-Any numbered lists or sequences of paragraphs in the main column will let you click on a step to highlight it. Click a different step to move the highlight. Only a single step can be highlighted at a time in a whole recipe.
+Any numbered lists or sequences of paragraphs in the main column will let you click on a step to highlight it. Paragraphs that are only bold text (e.g. ``**Dough**`` or ``**English**``) and level 4–6 headings (e.g. ``#### Dough``) are treated as sub-headings, not steps. Click a different step to move the highlight. Only a single step can be highlighted at a time in a whole recipe.
 
 After focusing a step (e.g. by clicking, tabbing) you can also use the arrow keys to move the selected step.
 

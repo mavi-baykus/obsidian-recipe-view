@@ -8,6 +8,7 @@ import { Writable, get, writable } from "svelte/store"
 import Fraction from "fraction.js";
 import { matchQuantities, normaliseFractions } from "./quantities";
 import { parseList } from "./helpers";
+import { RecipeBlock, buildRecipeModel } from "./model";
 import ScaledQuantity from "./ScaledQuantity.svelte";
 import { ComponentType } from "svelte";
 
@@ -110,6 +111,50 @@ function injectQuantities(parsedRecipe: ParsedRecipe, extraUnits: string[]) {
     })
 }
 
+function blockToComponent(
+    block: RecipeBlock, plugin: RecipeViewPlugin, radioName: string
+): ParsedRecipeComponent {
+    const [item] = block.elements;
+    switch (block.kind) {
+        case "ingredients":
+            return {
+                type: CheckableIngredientList,
+                props: { list: item, bullets: plugin.settings.showBulletsTwoColumn },
+                origIndex: block.origIndex,
+            };
+        case "steps":
+            return {
+                type: SelectableStepList,
+                props: { list: item, kind: "ol", radioName: radioName },
+                origIndex: block.origIndex,
+            };
+        case "paragraphs":
+            return {
+                type: SelectableStepList,
+                props: { list: block.elements, kind: "p", radioName: radioName },
+                origIndex: block.origIndex,
+            };
+        case "callout": {
+            // A callout is a top-level div, so it needs wrapping or we'll steal its
+            // children without the actual <div class='callout'> around them
+            const calloutWrapper = createDiv();
+            calloutWrapper.appendChild(item);
+            return {
+                type: RecipeLeaf,
+                props: { childNodesOf: calloutWrapper, asTag: "div" },
+                origIndex: block.origIndex,
+            };
+        }
+        default:
+            // Headings, sub-heading labels and anything else are shown as they are
+            return {
+                type: RecipeLeaf,
+                props: { childNodesOf: item, asTag: item.nodeName },
+                origIndex: block.origIndex,
+            };
+    }
+}
+
 export function parseRecipeMarkdown(
     plugin: RecipeViewPlugin, text: string, path: string, component: Component
 ) {
@@ -137,151 +182,24 @@ export function parseRecipeMarkdown(
     const radioName = `selectable-steps-${get(store.counter)}`;
     store.counter.update((n) => n + 1);
 
-    const sideColumnRegex = RegExp(plugin.settings.sideColumnRegex, "i");
-
-    let currentSection = 0;
-    let currentColumn = "mainComponents";
-
-    let sendToSideUntilLevel = 7;
-    for (let i = 0; i < result.renderedMarkdownParent.children.length; i++) {
-        const item = result.renderedMarkdownParent.children.item(i)!;
-
-        // Horizontal rules will create a new section
-        if (item.nodeName == "HR") {
-            result.sections.push({
-                containsHeader: false,
-                sideComponents: [],
-                mainComponents: [],
-            });
-            currentSection++;
-            currentColumn = "mainComponents"
-            sendToSideUntilLevel = 7;
-            continue; // Don't include the HR to be rendered
+    const model = buildRecipeModel(result.renderedMarkdownParent, {
+        sideColumnRegex: RegExp(plugin.settings.sideColumnRegex, "i"),
+        treatH1AsFilename: plugin.settings.treatH1AsFilename,
+    });
+    result.title = model.title;
+    result.thumbnailPath = model.thumbnailPath;
+    result.sections = model.sections.map((section) => {
+        const parsed: ParsedRecipeSection = {
+            containsHeader: section.containsHeader,
+            sideComponents: [],
+            mainComponents: [],
+        };
+        for (const block of section.blocks) {
+            const components = block.column == "side" ? parsed.sideComponents : parsed.mainComponents;
+            components.push(blockToComponent(block, plugin, radioName));
         }
-
-        // Headers can change which column to send items to
-        if (item.nodeName.match(/H[1-6]/)) {
-            const headerLevel = parseInt(item.nodeName.at(1)!);
-            if (
-                plugin.settings.treatH1AsFilename &&
-                headerLevel == 1 &&
-                result.sections[currentSection].containsHeader == false
-            ) {
-                result.title = item?.textContent || "";
-                continue;
-            } else {
-                result.sections[currentSection].containsHeader = true;
-            }
-            if (
-                item.textContent?.match(sideColumnRegex)
-            ) {
-                currentColumn = "sideComponents";
-                sendToSideUntilLevel = headerLevel;
-            } else if (
-                currentColumn == "sideComponents" &&
-                headerLevel <= sendToSideUntilLevel
-            ) {
-                currentColumn = "mainComponents";
-                sendToSideUntilLevel = 7;
-            }
-        }
-
-        // To stop margins from not collapsing below the title block,
-        // get rid of the display: none frontmatter
-        if (item.matches("pre.frontmatter")) {
-            continue;
-        }
-
-        // Extract the first image as a thumbnail
-        if (
-            item.getElementsByTagName("IMG").length > 0 &&
-            currentSection == 0 &&
-            !result.thumbnailPath &&
-            !result.sections[0].containsHeader
-        ) {
-            result.thumbnailPath = item
-                .getElementsByTagName("IMG")
-                .item(0)?.getAttribute("src") || "";
-            continue; // Don't send to either column
-        }
-
-        // If it's an unordered list, make it checkable if either:
-        // 1. it's going to the sidebar, or
-        // 2. we haven't seen a header yet (and then send it there)
-        if (
-            item.nodeName == "UL" &&
-            (currentColumn == "sideComponents" || !result.sections[currentSection].containsHeader)
-        ) {
-            result.sections[currentSection]["sideComponents"].push({
-                type: CheckableIngredientList,
-                props: { list: item, bullets: plugin.settings.showBulletsTwoColumn },
-                origIndex: i,
-            });
-            continue;
-        }
-
-        // If we're sending an ordered list to the main column, then make it selectable
-        if (item.nodeName == "OL" && currentColumn == "mainComponents") {
-            result.sections[currentSection][currentColumn].push({
-                type: SelectableStepList,
-                props: {
-                    list: item,
-                    kind: "ol",
-                    radioName: radioName,
-                },
-                origIndex: i,
-            });
-            continue;
-        }
-
-        // If we're sending a paragraph to the main column, then make it selectable
-        if (item.nodeName == "P" && currentColumn == "mainComponents") {
-            const prev = result.sections[currentSection][currentColumn][result.sections[currentSection][currentColumn].length - 1];
-            if (
-                prev &&
-                prev.type == SelectableStepList &&
-                prev.props.kind == "p"
-            ) {
-                (prev.props.list as Array<HTMLElement>).push(item as HTMLElement);
-            } else {
-                result.sections[currentSection][currentColumn].push({
-                    type: SelectableStepList,
-                    props: {
-                        list: [item],
-                        kind: "p",
-                        radioName: radioName,
-                    },
-                    origIndex: i,
-                });
-            }
-            continue;
-        }
-
-        // If it's a callout, that's a top-level div so we need to wrap it or we'll
-        // steal its children without the actual <div class='callout'> around them
-        if (item.hasClass("callout")) {
-            const calloutWrapper = createDiv();
-            calloutWrapper.appendChild(item);
-            // @ts-ignore
-            result.sections[currentSection][currentColumn].push({
-                type: RecipeLeaf,
-                props: { childNodesOf: calloutWrapper, asTag: "div" },
-                origIndex: i,
-            });
-            // because we reparented the callout, if we don't fix the index it'll skip
-            // the next block
-            i -= 1;
-            continue;
-        }
-
-        // Add current item to current column
-        // @ts-ignore
-        result.sections[currentSection][currentColumn].push({
-            type: RecipeLeaf,
-            props: { childNodesOf: item, asTag: item.nodeName },
-            origIndex: i,
-        });
-    }
+        return parsed;
+    });
 
     injectQuantities(result, parseList(plugin.settings.extraUnits));
 

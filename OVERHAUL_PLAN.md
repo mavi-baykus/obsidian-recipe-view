@@ -228,10 +228,10 @@ Each phase can be shipped on its own and keeps build, tests and lint green.
 
 | Phase | Scope | Size | Status |
 |-------|-------|------|--------|
-| 0 | Test setup: jsdom environment, fixtures from your two recipes | S | |
+| 0 | Test setup: jsdom environment, fixtures from your two recipes | S | ✅ Done (fixtures are Obsidian-rendered synthetic notes) |
 | 1 | **Toggle fix:** header actions, return-to-previous-mode, in-card toggle, hide the Buttons token, `RecipeView` lifecycle | S–M | ✅ Done |
 | 2 | **Quantity fixes:** bugs 1–5 and 8, with tests | S | ✅ Done (bug 6 is a note edit) |
-| 3 | Parsing split (model → components) and bold labels as sub-headings. No other visible change. | M | |
+| 3 | Parsing split (model → components) and bold labels as sub-headings. No other visible change. | M | ✅ Done (`src/model.ts`; `####`–`######` headings are sub-headings too) |
 | 4 | **Bilingual:** language settings, detection and pairing, language in view state and per-language commands, switcher, reveal UI, synced check/step state | L | |
 | 5 | Native in-note toggle token (Reading view, Live Preview and recipe view) with `button-RecipeView` alias | M | |
 | 6 | Docs, version bump to 0.4.0, tagged release so the fork can be installed with BRAT | S | |
