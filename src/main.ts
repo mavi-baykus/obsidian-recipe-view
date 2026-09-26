@@ -4,8 +4,12 @@ import { RecipeView, VIEW_TYPE_RECIPE } from './recipe-view';
 import store from './store';
 import { WHISK_SVG } from './whisk';
 import { ReturnMode, isRecipeNote, markdownModeForReturn, parseList, pickMarkdownMode, pickMarkdownPosition } from './helpers';
+import { parseLanguages } from './languages';
+import { LanguageModal } from './language-modal';
 
 type HeaderButtonMode = "recipes" | "all" | "off";
+type OpenLanguageMode = "last" | "default" | "ask";
+type RevealButtonsMode = "all" | "selected";
 
 interface RecipeViewPluginSettings {
 	sideColumnRegex: string;
@@ -19,6 +23,12 @@ interface RecipeViewPluginSettings {
 	returnMode: ReturnMode;
 	hiddenInlineCode: string;
 	extraUnits: string;
+	languages: string;
+	defaultLanguage: string;
+	openLanguage: OpenLanguageMode;
+	revealButtons: RevealButtonsMode;
+	/** The language last chosen for each bilingual recipe, by path */
+	lastLanguages: Record<string, string>;
 }
 
 const DEFAULT_SETTINGS: RecipeViewPluginSettings = {
@@ -33,6 +43,11 @@ const DEFAULT_SETTINGS: RecipeViewPluginSettings = {
 	returnMode: "previous",
 	hiddenInlineCode: "button-RecipeView",
 	extraUnits: "",
+	languages: "en: English, İngilizce\ntr: Türkçe, Turkish",
+	defaultLanguage: "",
+	openLanguage: "last",
+	revealButtons: "all",
+	lastLanguages: {},
 }
 
 export default class RecipeViewPlugin extends Plugin {
@@ -40,6 +55,10 @@ export default class RecipeViewPlugin extends Plugin {
 
 	// "Open as recipe" buttons added to the header of markdown views
 	headerActions = new Map<MarkdownView, HTMLElement>();
+
+	// Ids of the "Open recipe view in <language>" commands
+	languageCommandIds: string[] = [];
+	registeredLanguages = "";
 
 	async onload() {
 		await this.loadSettings();
@@ -56,6 +75,33 @@ export default class RecipeViewPlugin extends Plugin {
 			name: "Toggle between recipe card and markdown",
 			checkCallback: (c) => this.toggleView(c),
 		});
+
+		this.addCommand({
+			id: "choose-recipe-language",
+			name: "Choose the language of a bilingual recipe",
+			checkCallback: (checking) => {
+				const view = this.app.workspace.getActiveViewOfType(RecipeView);
+				if (!view || !view.hasLanguages()) return false;
+				if (!checking) view.askLanguage();
+				return true;
+			},
+		});
+		this.registerLanguageCommands();
+
+		// Keep the last chosen languages when recipes are renamed or deleted
+		this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
+			if (oldPath in this.settings.lastLanguages) {
+				this.settings.lastLanguages[file.path] = this.settings.lastLanguages[oldPath];
+				delete this.settings.lastLanguages[oldPath];
+				this.saveData(this.settings);
+			}
+		}));
+		this.registerEvent(this.app.vault.on("delete", (file) => {
+			if (file.path in this.settings.lastLanguages) {
+				delete this.settings.lastLanguages[file.path];
+				this.saveData(this.settings);
+			}
+		}));
 
 		// This adds a settings tab so the user can configure various aspects of the plugin
 		this.addSettingTab(new RecipeViewSettingsTab(this.app, this));
@@ -150,13 +196,55 @@ export default class RecipeViewPlugin extends Plugin {
 		return true;
 	}
 
-	async setRecipeView(leaf: WorkspaceLeaf) {
+	/** Add a command for each language, replacing the previous ones if they changed */
+	registerLanguageCommands() {
+		if (this.registeredLanguages == this.settings.languages) return;
+		this.registeredLanguages = this.settings.languages;
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const commands = (this.app as any).commands;
+		this.languageCommandIds.forEach((id) => commands?.removeCommand?.(`${this.manifest.id}:${id}`));
+		this.languageCommandIds = [];
+		for (const language of parseLanguages(this.settings.languages)) {
+			const id = `open-recipe-in-${language.code}`;
+			this.languageCommandIds.push(id);
+			this.addCommand({
+				id,
+				name: `Open recipe view in ${language.names[0]}`,
+				checkCallback: (checking) => {
+					const leaf = this.app.workspace.getMostRecentLeaf();
+					if (leaf?.view instanceof RecipeView) {
+						if (!checking) leaf.view.setLanguage(language.code);
+						return true;
+					}
+					if (leaf?.view instanceof MarkdownView) {
+						if (!checking) this.setRecipeView(leaf, language.code);
+						return true;
+					}
+					return false;
+				},
+			});
+		}
+	}
+
+	/** Remember the language chosen for a recipe, without re-rendering anything */
+	rememberLanguage(path: string, language: string) {
+		if (this.settings.lastLanguages[path] == language) return;
+		this.settings.lastLanguages[path] = language;
+		this.saveData(this.settings);
+	}
+
+	askLanguage(languages: Array<{ code: string; name: string }>, onChoose: (code: string) => void) {
+		new LanguageModal(this.app, languages, onChoose).open();
+	}
+
+	async setRecipeView(leaf: WorkspaceLeaf, language?: string) {
 		const state = leaf.view.getState();
 		await leaf.setViewState({
 			type: VIEW_TYPE_RECIPE,
 			// Remember whether the note was in reading view or editing, and where, to return to it
 			state: {
 				file: state.file,
+				language: language,
 				returnState: pickMarkdownMode(state),
 				returnPosition: pickMarkdownPosition(leaf.getEphemeralState()),
 			},
@@ -181,11 +269,13 @@ export default class RecipeViewPlugin extends Plugin {
 
 	async loadSettings() {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		this.settings.lastLanguages = { ...this.settings.lastLanguages };
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
 		this.updateHeaderActions();
+		this.registerLanguageCommands();
 		this.refreshRecipeViews();
 	}
 }
@@ -294,6 +384,54 @@ class RecipeViewSettingsTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.hiddenInlineCode)
 				.onChange(async (value) => {
 					this.plugin.settings.hiddenInlineCode = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl).setName("Bilingual recipes").setHeading()
+
+		new Setting(containerEl)
+			.setName('Languages')
+			.setDesc('One language per line: a short code, then the names you use to label each language in your notes, e.g. "tr: Türkçe, Turkish". A bold line or a heading with one of these names starts that language\'s ingredients or steps.')
+			.addTextArea(text => text
+				.setPlaceholder('en: English\ntr: Türkçe, Turkish')
+				.setValue(this.plugin.settings.languages)
+				.onChange(async (value) => {
+					this.plugin.settings.languages = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Default language')
+			.setDesc('The language to show bilingual recipes in, as a code or name. Leave empty to use the first language in each recipe. A recipe can set its own with a "recipe-language" property.')
+			.addText(text => text
+				.setPlaceholder('en')
+				.setValue(this.plugin.settings.defaultLanguage)
+				.onChange(async (value) => {
+					this.plugin.settings.defaultLanguage = value.trim();
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('When opening a bilingual recipe')
+			.addDropdown(dropdown => dropdown
+				.addOption("last", "Use the language last chosen for it")
+				.addOption("default", "Use the default language")
+				.addOption("ask", "Ask which language")
+				.setValue(this.plugin.settings.openLanguage)
+				.onChange(async (value) => {
+					this.plugin.settings.openLanguage = value as OpenLanguageMode;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Show translation buttons')
+			.setDesc('The button next to each ingredient and step that shows it in the other language.')
+			.addDropdown(dropdown => dropdown
+				.addOption("all", "On every ingredient and step")
+				.addOption("selected", "Only on the selected step and ingredient")
+				.setValue(this.plugin.settings.revealButtons)
+				.onChange(async (value) => {
+					this.plugin.settings.revealButtons = value as RevealButtonsMode;
 					await this.plugin.saveSettings();
 				}));
 

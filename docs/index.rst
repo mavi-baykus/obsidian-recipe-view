@@ -29,4 +29,5 @@ More details
    usage/features
    usage/formatting
    usage/scaling
+   usage/bilingual
    usage/shortcuts

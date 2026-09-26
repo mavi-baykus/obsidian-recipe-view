@@ -8,7 +8,9 @@ import { Writable, get, writable } from "svelte/store"
 import Fraction from "fraction.js";
 import { matchQuantities, normaliseFractions } from "./quantities";
 import { parseList } from "./helpers";
-import { RecipeBlock, buildRecipeModel } from "./model";
+import { RecipeBlock, Translation, buildRecipeModel } from "./model";
+import { languageName, parseLanguages } from "./languages";
+import LanguageWarning from "./LanguageWarning.svelte";
 import ScaledQuantity from "./ScaledQuantity.svelte";
 import { ComponentType } from "svelte";
 
@@ -17,6 +19,10 @@ export interface ParsedRecipeComponent {
     type: ComponentType;
     props: Record<string, unknown>;
     origIndex: number;
+    /** The language the component is in, if it is in a language section */
+    lang?: string;
+    /** Whether it is the label naming its language, hidden when showing one language */
+    languageLabel?: boolean;
 }
 
 export interface ParsedRecipeSection {
@@ -30,6 +36,10 @@ export interface ParsedRecipe {
     sections: Array<ParsedRecipeSection>;
     renderedMarkdownParent: HTMLElement;
     qtyScaleStore: Writable<Fraction>;
+    /** Languages the recipe has labels for, in order */
+    languages: Array<{ code: string; name: string }>;
+    /** Ingredients and steps matched between languages */
+    translations: Map<HTMLElement, Translation[]>;
 }
 
 function parseForQty(n: Node, qtyScaleStore: Writable<Fraction>, extraUnits: string[]) {
@@ -134,6 +144,12 @@ function blockToComponent(
                 props: { list: block.elements, kind: "p", radioName: radioName },
                 origIndex: block.origIndex,
             };
+        case "warning":
+            return {
+                type: LanguageWarning,
+                props: { message: block.message },
+                origIndex: block.origIndex,
+            };
         case "callout": {
             // A callout is a top-level div, so it needs wrapping or we'll steal its
             // children without the actual <div class='callout'> around them
@@ -174,6 +190,8 @@ export function parseRecipeMarkdown(
         }],
         renderedMarkdownParent: createDiv(),
         qtyScaleStore: writable(new Fraction(1)),
+        languages: [],
+        translations: new Map(),
     };
 
     MarkdownRenderer.render(plugin.app, text, result.renderedMarkdownParent, path, component);
@@ -182,12 +200,16 @@ export function parseRecipeMarkdown(
     const radioName = `selectable-steps-${get(store.counter)}`;
     store.counter.update((n) => n + 1);
 
+    const languages = parseLanguages(plugin.settings.languages);
     const model = buildRecipeModel(result.renderedMarkdownParent, {
         sideColumnRegex: RegExp(plugin.settings.sideColumnRegex, "i"),
         treatH1AsFilename: plugin.settings.treatH1AsFilename,
+        languages: languages,
     });
     result.title = model.title;
     result.thumbnailPath = model.thumbnailPath;
+    result.languages = model.languages.map((code) => ({ code, name: languageName(code, languages) }));
+    result.translations = model.translations;
     result.sections = model.sections.map((section) => {
         const parsed: ParsedRecipeSection = {
             containsHeader: section.containsHeader,
@@ -196,7 +218,10 @@ export function parseRecipeMarkdown(
         };
         for (const block of section.blocks) {
             const components = block.column == "side" ? parsed.sideComponents : parsed.mainComponents;
-            components.push(blockToComponent(block, plugin, radioName));
+            const component = blockToComponent(block, plugin, radioName);
+            if (block.lang) component.lang = block.lang;
+            if (block.languageLabel) component.languageLabel = true;
+            components.push(component);
         }
         return parsed;
     });

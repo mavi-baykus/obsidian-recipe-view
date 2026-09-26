@@ -3,6 +3,7 @@ import { Component, EditableFileView, Keymap, TFile, ViewStateResult, WorkspaceL
 import RecipeCard from "./RecipeCard.svelte"
 import { parseRecipeMarkdown } from "./parsing";
 import { MarkdownModeState, MarkdownPosition, parseList, pickMarkdownMode, pickMarkdownPosition, stripInlineCodeTokens } from "./helpers";
+import { chooseLanguage, parseLanguages } from "./languages";
 
 export const VIEW_TYPE_RECIPE = "recipe-view";
 
@@ -19,6 +20,10 @@ export class RecipeView extends EditableFileView {
     renderCount = 0
     // Kept across re-renders of the same note
     scaleNum = 1
+    // The language shown, if chosen; otherwise picked when the recipe is rendered
+    language: string | null = null
+    // The languages of the rendered recipe
+    languages: Array<{ code: string; name: string }> = []
 
     constructor(leaf: WorkspaceLeaf, plugin: RecipeViewPlugin) {
         super(leaf);
@@ -38,13 +43,22 @@ export class RecipeView extends EditableFileView {
     }
 
     getState() {
-        return { ...super.getState(), returnState: this.returnState, returnPosition: this.returnPosition };
+        return {
+            ...super.getState(),
+            language: this.language,
+            returnState: this.returnState,
+            returnPosition: this.returnPosition,
+        };
     }
 
     async setState(state: unknown, result: ViewStateResult): Promise<void> {
-        if (state && typeof state == "object" && "returnState" in state) {
-            this.returnState = pickMarkdownMode((state as Record<string, unknown>).returnState);
-            this.returnPosition = pickMarkdownPosition((state as Record<string, unknown>).returnPosition);
+        if (state && typeof state == "object") {
+            const s = state as Record<string, unknown>;
+            if ("returnState" in s) {
+                this.returnState = pickMarkdownMode(s.returnState);
+                this.returnPosition = pickMarkdownPosition(s.returnPosition);
+            }
+            this.language = typeof s.language == "string" ? s.language : null;
         }
         await super.setState(state, result);
     }
@@ -125,6 +139,20 @@ export class RecipeView extends EditableFileView {
             file.path,
             this.renderComponent,
         );
+        const settings = this.plugin.settings;
+        const requested = this.language;
+        const recipeLanguage = metadata?.frontmatter?.["recipe-language"];
+        this.languages = parsedRecipe.languages;
+        this.language = chooseLanguage(
+            parsedRecipe.languages.map((l) => l.code),
+            {
+                requested: requested,
+                noteDefault: typeof recipeLanguage == "string" ? recipeLanguage : null,
+                lastUsed: settings.openLanguage == "last" ? settings.lastLanguages[file.path] : null,
+                defaultLanguage: settings.defaultLanguage,
+            },
+            parseLanguages(settings.languages),
+        );
         this.content = new RecipeCard({
             target: this.contentEl,
             props: {
@@ -134,9 +162,38 @@ export class RecipeView extends EditableFileView {
                 view: this,
                 initialScale: this.scaleNum,
                 onScaleChange: (scale: number) => { this.scaleNum = scale },
+                language: this.language,
+                onLanguageChange: (language: string) => this.languageChanged(language),
+                initialWidth: this.contentEl.clientWidth || undefined,
             }
         });
 
+        if (!requested && settings.openLanguage == "ask" && this.hasLanguages()) {
+            this.askLanguage();
+        }
+
         return true;
+    }
+
+    hasLanguages() {
+        return this.languages.length > 1;
+    }
+
+    /** Show the recipe in another language, keeping crossed-out ingredients and steps */
+    setLanguage(language: string) {
+        this.content?.$set({ language });
+        this.languageChanged(language);
+    }
+
+    askLanguage() {
+        this.plugin.askLanguage(this.languages, (language) => this.setLanguage(language));
+    }
+
+    languageChanged(language: string) {
+        this.language = language;
+        if (this.file && this.hasLanguages()) {
+            this.plugin.rememberLanguage(this.file.path, language);
+        }
+        this.app.workspace.requestSaveLayout();
     }
 }

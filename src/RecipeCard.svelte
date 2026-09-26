@@ -1,9 +1,14 @@
 <script lang="ts">
 	import { CachedMetadata, TFile } from "obsidian";
+	import { setContext } from "svelte";
+	import { writable } from "svelte/store";
 	import RecipeCardTitleBlock from "./RecipeCardTitleBlock.svelte";
 	import RecipeViewPlugin from "./main";
 	import store from "./store";
-	import ScaleSelector from "./ScaleSelector.svelte";
+	import RecipeToolbar from "./RecipeToolbar.svelte";
+	import LanguageWarning from "./LanguageWarning.svelte";
+	import { ALL_LANGUAGES } from "./languages";
+	import { LANGUAGE_CONTEXT, LanguageContext } from "./recipe-context";
 	import Fraction from "fraction.js";
 	import RecipeCardTwoColumn from "./RecipeCardTwoColumn.svelte";
 	import RecipeCardSplitSteps from "./RecipeCardSplitSteps.svelte";
@@ -21,6 +26,11 @@
 	export let view: RecipeView;
 	export let initialScale = 1;
 	export let onScaleChange: ((scale: number) => void) | undefined = undefined;
+	export let language: string = ALL_LANGUAGES;
+	// Width of the view when first rendered, so the right layout is picked straight away
+	export let initialWidth: number | undefined = undefined;
+	export let onLanguageChange: ((language: string) => void) | undefined =
+		undefined;
 
 	// Recipe scaling - create store here to pass to all children via ctx
 	let scaleNum = initialScale;
@@ -28,18 +38,54 @@
 	$: parsedRecipe?.qtyScaleStore.set(qtyScale);
 	$: if (scaleNum) onScaleChange?.(scaleNum);
 
+	// Languages of bilingual recipes, shared with the ingredient and step lists
+	const languageStore = writable(language);
+	const revealAll = writable(false);
+	const languageContext: LanguageContext = {
+		language: languageStore,
+		names: Object.fromEntries(
+			parsedRecipe.languages.map(({ code, name }) => [code, name]),
+		),
+		translations: parsedRecipe.translations,
+		revealed: writable(new Set()),
+		revealAll: revealAll,
+		selectedStep: writable(null),
+		revealOnSelectedOnly: view.plugin.settings.revealButtons == "selected",
+	};
+	setContext(LANGUAGE_CONTEXT, languageContext);
+	// The language can be changed from outside (a command) or by the toolbar
+	$: languageStore.set(language);
+	let previousLanguage = language;
+	languageStore.subscribe((l) => {
+		if (l == previousLanguage) return;
+		previousLanguage = l;
+		language = l;
+		onLanguageChange?.(l);
+	});
+
+	// When showing one language, hide the other languages and the language labels
+	function isShown(c: ParsedRecipeComponent, language: string) {
+		if (language == ALL_LANGUAGES) return c.type != LanguageWarning;
+		return !c.lang || (c.lang == language && !c.languageLabel);
+	}
+	$: visibleSections = parsedRecipe.sections.map((s) => ({
+		...s,
+		sideComponents: s.sideComponents.filter((c) => isShown(c, language)),
+		mainComponents: s.mainComponents.filter((c) => isShown(c, language)),
+	}));
+
 	// Determining the recipe format
-	let containerWidth: number;
+	let containerWidth: number | undefined = initialWidth;
 	$: isBelowSingleColumnWidth =
+		containerWidth !== undefined &&
 		containerWidth < plugin.settings.singleColumnMaxWidth;
-	$: twoColumnSideComponents =
-		parsedRecipe?.sections.flatMap(
-			({ sideComponents }) => sideComponents
-		) || [];
-	$: twoColumnMainComponents =
-		parsedRecipe?.sections.map(({ mainComponents }) => mainComponents) ||
-		[];
-	$: singleColumnSections = parsedRecipe?.sections.map((s) =>
+	$: twoColumnSideComponents = visibleSections.flatMap(
+		({ sideComponents }) => sideComponents,
+	);
+	$: twoColumnMainComponents = visibleSections.map(
+		({ mainComponents }) => mainComponents,
+	);
+	$: singleColumnSections = visibleSections.map((s) =>
 		s.sideComponents
 			.concat(s.mainComponents)
 			.sort(
@@ -82,14 +128,13 @@
 		) as NodeListOf<HTMLInputElement>;
 		for (let i = 0; i < steps.length; i++) {
 			if (steps.item(i).checked) {
-				if (!focusOnly && steps.item(i + 1))
-					steps.item(i + 1).checked = true;
+				if (!focusOnly && steps.item(i + 1)) select(steps.item(i + 1));
 				if (focusOnly || steps.item(i + 1))
 					steps.item(focusOnly ? i : i + 1).focus();
 				return;
 			}
 		}
-		if (!focusOnly) steps.item(0).checked = true;
+		if (!focusOnly) select(steps.item(0));
 		steps.item(0).focus();
 	}
 
@@ -99,11 +144,30 @@
 		) as NodeListOf<HTMLInputElement>;
 		for (let i = 1; i < steps.length; i++) {
 			if (steps.item(i).checked) {
-				steps.item(i - 1).checked = true;
+				select(steps.item(i - 1));
 				steps.item(i - 1).focus();
 				return;
 			}
 		}
+	}
+
+	// Select a step as if it was clicked, so the selection is kept across languages
+	function select(step: HTMLInputElement) {
+		step.checked = true;
+		step.dispatchEvent(new Event("change"));
+	}
+
+	// Show or hide the translation of the focused ingredient or the selected step
+	function toggleTranslation() {
+		const focused = container.querySelector(
+			"input[type=checkbox]:focus, input[type=radio]:focus",
+		);
+		const input =
+			focused || container.querySelector("input[type=radio]:checked");
+		const button = input
+			?.closest(".translatable")
+			?.querySelector(":scope > .reveal-translation") as HTMLElement | null;
+		button?.click();
 	}
 
 	function handleKeypress(e: KeyboardEvent) {
@@ -131,6 +195,10 @@
 			checkNext(true);
 		} else if (e.key == "l") {
 			advanceStep(true);
+		} else if (e.key == "t") {
+			toggleTranslation();
+		} else if (e.key == "T") {
+			revealAll.update((all) => !all);
 		}
 	}
 </script>
@@ -147,10 +215,13 @@
 >
 	{#if isBelowSingleColumnWidth != false || twoColumnSideComponents.length == 0 || twoColumnMainComponents.flat().length == 0}
 		<RecipeCardOneColumn sections={singleColumnSections}>
-			<ScaleSelector
+			<RecipeToolbar
 				slot="scaleselector"
 				bind:scale={qtyScale}
 				bind:scaleNum
+				language={languageStore}
+				languages={parsedRecipe.languages}
+				{revealAll}
 			/>
 
 			<RecipeCardTitleBlock
@@ -169,10 +240,13 @@
 			sideColumnComponents={twoColumnSideComponents}
 			mainColumnSections={twoColumnMainComponents}
 		>
-			<ScaleSelector
+			<RecipeToolbar
 				slot="scaleselector"
 				bind:scale={qtyScale}
 				bind:scaleNum
+				language={languageStore}
+				languages={parsedRecipe.languages}
+				{revealAll}
 			/>
 
 			<RecipeCardTitleBlock
@@ -187,11 +261,14 @@
 			/>
 		</RecipeCardTwoColumn>
 	{:else}
-		<RecipeCardSplitSteps sections={parsedRecipe?.sections}>
-			<ScaleSelector
+		<RecipeCardSplitSteps sections={visibleSections}>
+			<RecipeToolbar
 				slot="scaleselector"
 				bind:scale={qtyScale}
 				bind:scaleNum
+				language={languageStore}
+				languages={parsedRecipe.languages}
+				{revealAll}
 			/>
 
 			<RecipeCardTitleBlock

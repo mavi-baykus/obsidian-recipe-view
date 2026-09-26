@@ -7,3 +7,4 @@ In addition to the standard browser shortcuts, a few extras have been added. All
 - Use :kbd:`n` and :kbd:`p` to check off the next ingredient or uncheck the previous ingredient.
 - Use :kbd:`h` and :kbd:`l` to focus the current ingredient/step.
 - Use :kbd:`[` and :kbd:`]` to scale the recipe in increments of 0.25.
+- In bilingual recipes, use :kbd:`t` to show or hide the translation of the focused ingredient or selected step, and :kbd:`T` to show or hide all translations.

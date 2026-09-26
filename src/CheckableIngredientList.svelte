@@ -1,8 +1,19 @@
 <script lang="ts">
+	import { getContext } from "svelte";
 	import RecipeLeaf from "./RecipeLeaf.svelte";
+	import Translations from "./Translations.svelte";
+	import {
+		LANGUAGE_CONTEXT,
+		LanguageContext,
+		otherTranslations,
+	} from "./recipe-context";
+	import { ALL_LANGUAGES } from "./languages";
 
 	export let list: HTMLUListElement;
 	export let bullets: boolean;
+
+	const ctx = getContext<LanguageContext>(LANGUAGE_CONTEXT);
+	const language = ctx.language;
 
 	function isChecked(index: number): boolean {
 		return (
@@ -12,23 +23,29 @@
 	}
 
 	function changeChecked(index: number, e: Event) {
-		list.children
-			.item(index)
-			?.setAttr(
-				"data-checked",
-				(e.target as HTMLInputElement).checked ? "true" : "false",
-			);
+		const checked = (e.target as HTMLInputElement).checked ? "true" : "false";
+		const item = itemAt(index);
+		item.setAttr("data-checked", checked);
+		// Cross out the same ingredient in the other languages too
+		ctx.translations.get(item)?.forEach((t) => t.el.setAttr("data-checked", checked));
 	}
 
 	function itemAt(index: number): HTMLElement {
 		return (list.children.item(index) as HTMLLIElement)!;
 	}
+
+	function othersOf(index: number, language: string) {
+		return language == ALL_LANGUAGES
+			? []
+			: otherTranslations(ctx, itemAt(index), language);
+	}
 </script>
 
 <div>
-	<ul class:bullets>
+	<ul class:bullets class:reveal-selected-only={ctx.revealOnSelectedOnly}>
 		{#each list.children as _, i}
-			<li>
+			{@const others = othersOf(i, $language)}
+			<li class:translatable={others.length > 0}>
 				<label>
 					<!-- Persist checkbox state on component re-construction by setting
 				data-checked on the underlying LI element from the rendered markdown.
@@ -42,6 +59,12 @@
 						<RecipeLeaf childNodesOf={itemAt(i)} asTag="div" />
 					</div>
 				</label>
+				{#if others.length > 0}
+					<Translations
+						translations={ctx.translations.get(itemAt(i)) || []}
+						{others}
+					/>
+				{/if}
 			</li>
 		{/each}
 	</ul>
@@ -75,6 +98,17 @@
 	ul > li {
 		list-style-type: none;
 		margin-block: var(--list-spacing);
+	}
+
+	ul > li.translatable {
+		position: relative;
+		padding-inline-end: var(--size-4-6);
+	}
+
+	ul.reveal-selected-only
+		> li:not(:focus-within):not(:hover)
+		> :global(.reveal-translation:not(.is-active)) {
+		visibility: hidden;
 	}
 
 	ul.bullets > li {

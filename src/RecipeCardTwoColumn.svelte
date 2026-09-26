@@ -7,7 +7,7 @@
 <div class="recipe-card two-column">
 	<div class="column column-side">
 		<slot name="scaleselector" />
-		{#each sideColumnComponents as c}
+		{#each sideColumnComponents as c (c)}
 			<svelte:component this={c.type} {...c.props} />
 		{/each}
 	</div>
@@ -20,7 +20,7 @@
 				class="split-step"
 				class:only-step={mainColumnSections.length == 1}
 			>
-				{#each mainColumnComponents as c}
+				{#each mainColumnComponents as c (c)}
 					<svelte:component this={c.type} {...c.props} />
 				{/each}
 			</div>

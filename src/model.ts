@@ -2,6 +2,8 @@
 // which section and column, and what each block is. Uses only standard DOM APIs, so it
 // can be unit tested outside of Obsidian.
 
+import { LanguageConfig, languageName, matchLanguage } from "./languages";
+
 export type RecipeColumn = "side" | "main";
 
 export type RecipeBlockKind =
@@ -21,7 +23,9 @@ export type RecipeBlockKind =
     /** A callout, which needs wrapping to keep its outer element */
     | "callout"
     /** Anything else, shown as-is */
-    | "other";
+    | "other"
+    /** A note that items couldn't be matched between languages */
+    | "warning";
 
 export interface RecipeBlock {
     kind: RecipeBlockKind;
@@ -32,6 +36,12 @@ export interface RecipeBlock {
     origIndex: number;
     /** Heading level, for "heading" and heading "label" blocks */
     level?: number;
+    /** The language this block is in, if it is in a language section */
+    lang?: string;
+    /** Whether this block is the label naming its language, e.g. "**English**" */
+    languageLabel?: boolean;
+    /** The text of a "warning" block */
+    message?: string;
 }
 
 export interface RecipeSection {
@@ -39,10 +49,23 @@ export interface RecipeSection {
     blocks: RecipeBlock[];
 }
 
+/** An ingredient or step, in one of the languages of a recipe */
+export interface Translation {
+    lang: string;
+    el: HTMLElement;
+}
+
 export interface RecipeModel {
     title: string;
     thumbnailPath: string;
     sections: RecipeSection[];
+    /** Codes of the languages the recipe has labels for, in order */
+    languages: string[];
+    /**
+     * Ingredients and steps (list items or paragraphs) matched between languages: the
+     * same item in each language
+     */
+    translations: Map<HTMLElement, Translation[]>;
 }
 
 export interface RecipeModelOptions {
@@ -50,6 +73,8 @@ export interface RecipeModelOptions {
     sideColumnRegex: RegExp;
     /** Use the first level one heading as the title */
     treatH1AsFilename: boolean;
+    /** Languages whose names mark language sections in bilingual recipes */
+    languages?: LanguageConfig[];
 }
 
 /** Lowest heading level treated as a sub-heading ("label") rather than a section heading */
@@ -89,6 +114,8 @@ export function buildRecipeModel(root: HTMLElement, options: RecipeModelOptions)
         title: "",
         thumbnailPath: "",
         sections: [{ containsHeader: false, blocks: [] }],
+        languages: [],
+        translations: new Map(),
     };
     let section = model.sections[0];
     let column: RecipeColumn = "main";
@@ -195,5 +222,118 @@ export function buildRecipeModel(root: HTMLElement, options: RecipeModelOptions)
         add({ kind: "other", column, elements: [item], origIndex: i });
     });
 
+    if (options.languages?.length) {
+        assignLanguages(model, options.languages);
+    }
+
     return model;
+}
+
+type TranslatableKind = "ingredients" | "steps";
+
+/** The ingredients or steps in a block that can be matched between languages */
+function translatableItems(block: RecipeBlock): [TranslatableKind, HTMLElement[]] | null {
+    switch (block.kind) {
+        case "ingredients":
+            return ["ingredients", Array.from(block.elements[0].children) as HTMLElement[]];
+        case "steps":
+            return ["steps", Array.from(block.elements[0].children) as HTMLElement[]];
+        case "paragraphs":
+            return ["steps", block.elements];
+        default:
+            return null;
+    }
+}
+
+/** A run of language sections under one heading, e.g. "**Türkçe**" then "**English**" */
+interface LanguageGroup {
+    /** For each language: its label block, and its ingredients and steps in order */
+    languages: Map<string, { label: RecipeBlock; items: Record<TranslatableKind, HTMLElement[]> }>;
+}
+
+/**
+ * Mark which blocks are in which language, and match up the ingredients and steps of
+ * each language by position.
+ *
+ * A language section starts at a label naming a language: a bold paragraph, or a heading
+ * of any level. It runs until the next language label, or a heading that ends it: a
+ * level 1-3 heading for a bold label, or a heading of the same or a higher level for a
+ * heading label. Sections split by horizontal rules also end it.
+ */
+function assignLanguages(model: RecipeModel, languages: LanguageConfig[]) {
+    const groups: LanguageGroup[] = [];
+
+    for (const section of model.sections) {
+        let current: { lang: string; endLevel: number; group: LanguageGroup } | null = null;
+        for (const block of section.blocks) {
+            const isHeading = block.kind == "heading" || block.kind == "label";
+            const lang = isHeading ? matchLanguage(block.elements[0].textContent || "", languages) : null;
+            if (lang) {
+                const group: LanguageGroup = current?.group || { languages: new Map() };
+                if (!current) groups.push(group);
+                current = { lang, endLevel: block.level || LABEL_HEADING_LEVEL - 1, group };
+                block.lang = lang;
+                block.languageLabel = true;
+                if (!model.languages.includes(lang)) model.languages.push(lang);
+                if (!group.languages.has(lang)) {
+                    group.languages.set(lang, { label: block, items: { ingredients: [], steps: [] } });
+                }
+                continue;
+            }
+            if (current && isHeading && block.level && block.level <= current.endLevel) {
+                current = null;
+            }
+            if (!current) continue;
+            block.lang = current.lang;
+            const items = translatableItems(block);
+            if (items) {
+                current.group.languages.get(current.lang)!.items[items[0]].push(...items[1]);
+            }
+        }
+    }
+
+    const warnings: { label: RecipeBlock; warning: RecipeBlock }[] = [];
+    for (const group of groups) {
+        if (group.languages.size < 2) continue;
+        const entries = Array.from(group.languages.entries());
+        for (const kind of ["ingredients", "steps"] as TranslatableKind[]) {
+            const counts = entries.map(([, l]) => l.items[kind].length);
+            if (counts.every((c) => c == 0)) continue;
+            if (counts.every((c) => c == counts[0])) {
+                for (let i = 0; i < counts[0]; i++) {
+                    const translation = entries.map(([lang, l]) => ({ lang, el: l.items[kind][i] }));
+                    translation.forEach(({ el }) => model.translations.set(el, translation));
+                }
+            } else {
+                const message = `Can't match ${kind} between languages: ` + entries
+                    .map(([lang, l]) => `${languageName(lang, languages)} has ${l.items[kind].length}`)
+                    .join(", ");
+                for (const [lang, l] of entries) {
+                    warnings.push({
+                        label: l.label,
+                        warning: {
+                            kind: "warning",
+                            column: l.label.column,
+                            elements: [],
+                            origIndex: l.label.origIndex + 0.5,
+                            lang,
+                            message,
+                        },
+                    });
+                }
+            }
+        }
+    }
+    // Show each warning straight after its language's label
+    for (const { label, warning } of warnings) {
+        for (const section of model.sections) {
+            const labelIndex = section.blocks.indexOf(label);
+            if (labelIndex >= 0) {
+                let at = labelIndex + 1;
+                while (section.blocks[at]?.kind == "warning") at++;
+                section.blocks.splice(at, 0, warning);
+                break;
+            }
+        }
+    }
 }
