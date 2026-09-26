@@ -260,3 +260,83 @@ describe('bilingual recipes', () => {
         ]);
     });
 });
+
+describe('bilingual recipe edge cases', () => {
+    const languages = parseLanguages("en: English\ntr: Türkçe");
+    const build = (s: string) => {
+        const root = document.createElement("div");
+        root.innerHTML = s.trim();
+        return { root, model: buildRecipeModel(root, { sideColumnRegex: /Ingredients/i, treatH1AsFilename: false, languages }) };
+    };
+    const langs = (model: RecipeModel) => model.sections[0].blocks.map((b) => `${b.kind} ${b.lang || "-"}`);
+
+    test('bold labels under a level 2 heading keep level 3 sub-headings', () => {
+        const { root, model } = build(`
+<h2>Ingredients</h2>
+<p><strong>Türkçe</strong></p><h3>Hamur</h3><ul><li>un</li></ul>
+<p><strong>English</strong></p><h3>Dough</h3><ul><li>flour</li></ul>
+<h2>Directions</h2><p>Mix.</p>`);
+        expect(langs(model)).toStrictEqual([
+            "heading -", "label tr", "heading tr", "ingredients tr",
+            "label en", "heading en", "ingredients en",
+            "heading -", "paragraphs -",
+        ]);
+        expect(model.translations.get(root.querySelector("li") as HTMLElement)?.map((t) => t.el.textContent))
+            .toStrictEqual(["un", "flour"]);
+    });
+
+    test('a bold label after the last language is shared', () => {
+        const { root, model } = build(`
+<h3>Directions</h3>
+<p><strong>Türkçe</strong></p><ol><li>a</li></ol>
+<p><strong>English</strong></p><ol><li>A</li></ol>
+<p><strong>Notes</strong></p><p>Some note.</p>`);
+        expect(langs(model)).toStrictEqual([
+            "heading -", "label tr", "steps tr", "label en", "steps en", "label -", "paragraphs -",
+        ]);
+        expect(model.translations.get(root.querySelector("li") as HTMLElement)?.length).toBe(2);
+    });
+
+    test('a paragraph starting with a bold line after the last language is shared', () => {
+        const { root, model } = build(`
+<h3>Directions</h3>
+<p><strong>Türkçe</strong></p><ol><li>a</li></ol>
+<p><strong>English</strong></p><ol><li>A</li></ol>
+<p><strong>Notes</strong><br>
+Serve hot.</p>`);
+        expect(langs(model)).toStrictEqual([
+            "heading -", "label tr", "steps tr", "label en", "steps en", "paragraphs -",
+        ]);
+        expect(model.translations.get(root.querySelector("li") as HTMLElement)?.length).toBe(2);
+    });
+
+    test('paragraphs starting with matching bold lines stay in their languages', () => {
+        const { model } = build(`
+<h3>Directions</h3>
+<p><strong>Türkçe</strong></p><p><strong>Hamur</strong><br>Karıştır.</p>
+<p><strong>English</strong></p><p><strong>Dough</strong><br>Mix.</p>`);
+        expect(langs(model)).toStrictEqual([
+            "heading -", "label tr", "paragraphs tr", "label en", "paragraphs en",
+        ]);
+    });
+
+    test('matching bold sub-headings stay in their languages', () => {
+        const { model } = build(`
+<h3>Directions</h3>
+<p><strong>Türkçe</strong></p><p><strong>Hamur</strong></p><ol><li>a</li></ol>
+<p><strong>English</strong></p><p><strong>Dough</strong></p><ol><li>A</li></ol>
+<p><strong>Notes</strong></p><p>Shared.</p>`);
+        expect(langs(model)).toStrictEqual([
+            "heading -", "label tr", "label tr", "steps tr",
+            "label en", "label en", "steps en", "label -", "paragraphs -",
+        ]);
+    });
+
+    test('warnings go in the column of the items', () => {
+        const { model } = build(`
+<p><strong>Türkçe</strong></p><ul><li>soğan</li><li>tuz</li></ul>
+<p><strong>English</strong></p><ul><li>onion</li></ul>`);
+        const warnings = model.sections[0].blocks.filter((b) => b.kind == "warning");
+        expect(warnings.map((w) => `${w.lang} ${w.column}`)).toStrictEqual(["tr side", "en side"]);
+    });
+});

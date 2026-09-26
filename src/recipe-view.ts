@@ -3,7 +3,7 @@ import { Component, EditableFileView, Keymap, TFile, ViewStateResult, WorkspaceL
 import RecipeCard from "./RecipeCard.svelte"
 import { parseRecipeMarkdown } from "./parsing";
 import { MarkdownModeState, MarkdownPosition, parseList, pickMarkdownMode, pickMarkdownPosition, stripInlineCodeTokens } from "./helpers";
-import { chooseLanguage, parseLanguages } from "./languages";
+import { ALL_LANGUAGES, chooseLanguage, parseLanguages } from "./languages";
 
 export const VIEW_TYPE_RECIPE = "recipe-view";
 
@@ -143,7 +143,7 @@ export class RecipeView extends EditableFileView {
         const requested = this.language;
         const recipeLanguage = metadata?.frontmatter?.["recipe-language"];
         this.languages = parsedRecipe.languages;
-        this.language = chooseLanguage(
+        const language = chooseLanguage(
             parsedRecipe.languages.map((l) => l.code),
             {
                 requested: requested,
@@ -153,6 +153,9 @@ export class RecipeView extends EditableFileView {
             },
             parseLanguages(settings.languages),
         );
+        // Only keep a language for recipes that have them, so a recipe that gains a second
+        // language later still gets the default or is asked about
+        this.language = this.hasLanguages() ? language : requested;
         this.content = new RecipeCard({
             target: this.contentEl,
             props: {
@@ -162,7 +165,7 @@ export class RecipeView extends EditableFileView {
                 view: this,
                 initialScale: this.scaleNum,
                 onScaleChange: (scale: number) => { this.scaleNum = scale },
-                language: this.language,
+                language: language,
                 onLanguageChange: (language: string) => this.languageChanged(language),
                 initialWidth: this.contentEl.clientWidth || undefined,
             }
@@ -179,10 +182,15 @@ export class RecipeView extends EditableFileView {
         return this.languages.length > 1;
     }
 
+    hasLanguage(language: string) {
+        return language == ALL_LANGUAGES || this.languages.some((l) => l.code == language);
+    }
+
     /** Show the recipe in another language, keeping crossed-out ingredients and steps */
     setLanguage(language: string) {
+        if (!this.hasLanguages() || !this.hasLanguage(language)) return;
+        // The card calls back to languageChanged
         this.content?.$set({ language });
-        this.languageChanged(language);
     }
 
     askLanguage() {

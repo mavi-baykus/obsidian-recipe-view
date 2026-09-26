@@ -13,9 +13,11 @@
 	export let bullets: boolean;
 
 	const ctx = getContext<LanguageContext>(LANGUAGE_CONTEXT);
-	const language = ctx.language;
+	const { language, checks } = ctx;
 
-	function isChecked(index: number): boolean {
+	// Depends on $checks so it updates when another language's copy is crossed out
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	function isChecked(index: number, _checks = 0): boolean {
 		return (
 			list.children.item(index)?.getAttr("data-checked") == "true" ||
 			false
@@ -28,6 +30,7 @@
 		item.setAttr("data-checked", checked);
 		// Cross out the same ingredient in the other languages too
 		ctx.translations.get(item)?.forEach((t) => t.el.setAttr("data-checked", checked));
+		checks.update((n) => n + 1);
 	}
 
 	function itemAt(index: number): HTMLElement {
@@ -52,7 +55,7 @@
 				-->
 					<input
 						type="checkbox"
-						checked={isChecked(i)}
+						checked={isChecked(i, $checks)}
 						on:change={(e) => changeChecked(i, e)}
 					/>
 					<div class="leaf">

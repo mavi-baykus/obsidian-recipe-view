@@ -15,6 +15,8 @@ export interface LanguageContext {
     revealed: Writable<Set<Translation[]>>;
     /** Show every translation */
     revealAll: Writable<boolean>;
+    /** Changes whenever an ingredient is crossed out, to update its other languages */
+    checks: Writable<number>;
     /** The element of the selected step */
     selectedStep: Writable<HTMLElement | null>;
     /** Only show the translate button on the selected step and focused ingredient */

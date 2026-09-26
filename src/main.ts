@@ -213,6 +213,7 @@ export default class RecipeViewPlugin extends Plugin {
 				checkCallback: (checking) => {
 					const leaf = this.app.workspace.getMostRecentLeaf();
 					if (leaf?.view instanceof RecipeView) {
+						if (!leaf.view.hasLanguages() || !leaf.view.hasLanguage(language.code)) return false;
 						if (!checking) leaf.view.setLanguage(language.code);
 						return true;
 					}
@@ -402,7 +403,7 @@ class RecipeViewSettingsTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Default language')
-			.setDesc('The language to show bilingual recipes in, as a code or name. Leave empty to use the first language in each recipe. A recipe can set its own with a "recipe-language" property.')
+			.setDesc('The language to show bilingual recipes in, as a code or name. Leave empty to use the first language in each recipe. A recipe can set its own default with a "recipe-language" property.')
 			.addText(text => text
 				.setPlaceholder('en')
 				.setValue(this.plugin.settings.defaultLanguage)

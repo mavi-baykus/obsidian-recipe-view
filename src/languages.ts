@@ -74,7 +74,8 @@ export interface LanguageChoice {
 }
 
 /**
- * Pick the language to show a recipe in, from the languages it has. Each option can be a
+ * Pick the language to show a recipe in, from the languages it has: the one asked for, the
+ * one last chosen for the note, the note's own default, then the default setting. Each option can be a
  * code or a name, and is skipped if the recipe doesn't have that language. Falls back
  * to the first language in the recipe.
  */
@@ -84,7 +85,7 @@ export function chooseLanguage(
     languages: LanguageConfig[],
 ): string {
     if (available.length < 2) return ALL_LANGUAGES;
-    for (const option of [choice.requested, choice.noteDefault, choice.lastUsed, choice.defaultLanguage]) {
+    for (const option of [choice.requested, choice.lastUsed, choice.noteDefault, choice.defaultLanguage]) {
         if (!option) continue;
         if (option == ALL_LANGUAGES) return ALL_LANGUAGES;
         const code = available.includes(option) ? option : matchLanguage(option, languages);

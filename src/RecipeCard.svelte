@@ -49,6 +49,7 @@
 		translations: parsedRecipe.translations,
 		revealed: writable(new Set()),
 		revealAll: revealAll,
+		checks: writable(0),
 		selectedStep: writable(null),
 		revealOnSelectedOnly: view.plugin.settings.revealButtons == "selected",
 	};
@@ -103,23 +104,29 @@
 
 	function checkNext(focusOnly: boolean) {
 		const nextUnchecked = container.querySelector(
-			"input[type=checkbox]:not(:checked)"
+			"li input[type=checkbox]:not(:checked)"
 		) as HTMLInputElement;
 		if (nextUnchecked) {
-			if (!focusOnly) nextUnchecked.checked = true;
+			if (!focusOnly) setChecked(nextUnchecked, true);
 			nextUnchecked.focus();
 		}
 	}
 
 	function uncheckPrevious() {
 		const checked = container.querySelectorAll(
-			"input[type=checkbox]:checked"
+			"li input[type=checkbox]:checked"
 		) as NodeListOf<HTMLInputElement>;
 		if (checked.length > 0) {
 			const lastChecked = checked.item(checked.length - 1);
-			lastChecked.checked = false;
+			setChecked(lastChecked, false);
 			lastChecked.focus();
 		}
+	}
+
+	// Cross out an ingredient as if it was clicked, so it is kept across languages
+	function setChecked(ingredient: HTMLInputElement, checked: boolean) {
+		ingredient.checked = checked;
+		ingredient.dispatchEvent(new Event("change"));
 	}
 
 	function advanceStep(focusOnly: boolean) {
@@ -197,7 +204,7 @@
 			advanceStep(true);
 		} else if (e.key == "t") {
 			toggleTranslation();
-		} else if (e.key == "T") {
+		} else if (e.key == "T" && language != ALL_LANGUAGES) {
 			revealAll.update((all) => !all);
 		}
 	}

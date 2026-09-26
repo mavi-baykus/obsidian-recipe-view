@@ -26,7 +26,7 @@ Label each language with a line of bold text, or a heading, using one of the nam
   **English**
   1. Chop the onion.
 
-A language's section runs until the next language label or the next section heading (``### Directions`` above). With heading labels like ``#### English``, it runs until the next heading of the same or a higher level. Anything outside a language section, such as a ``### Notes`` section, is shown in every language.
+A language's section runs until the next language label or the next section heading at the same level (``### Directions`` above), so lower sub-headings like ``#### Dough`` stay inside it. With heading labels like ``#### English``, it runs until the next heading of the same or a higher level. Anything outside a language section, such as a ``### Notes`` section, is shown in every language. A bold line after the last language that the other languages don't have, like ``**Notes**`` after the English steps, is also shown in every language.
 
 Ingredients and steps are matched between languages by position: the third ingredient in Türkçe goes with the third in English. Sub-headings inside a language, like ``**Dough**``, are fine. If the number of ingredients (or steps) differs between languages, they can't be matched, and a warning is shown instead of translation buttons.
 
@@ -35,7 +35,7 @@ Choosing a language
 
 * Use the buttons under *Scale recipe* to switch between languages, or show both.
 * The *When opening a bilingual recipe* setting chooses between the language last used for that recipe, the *Default language*, or asking each time.
-* A recipe can set its own language with a ``recipe-language`` property, e.g. ``recipe-language: English``.
+* A recipe can set its own default language with a ``recipe-language`` property, e.g. ``recipe-language: English``. The language you last chose for it still comes first.
 * The *Open recipe view in <language>* commands open a recipe in a particular language, and *Choose the language of a bilingual recipe* asks.
 
 Showing translations

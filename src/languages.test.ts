@@ -54,7 +54,8 @@ describe('choosing the language to open', () => {
     });
     test('first available option wins', () => {
         expect(chooseLanguage(available, { requested: "en", noteDefault: "tr" }, languages)).toBe("en");
-        expect(chooseLanguage(available, { noteDefault: "Turkish", lastUsed: "en" }, languages)).toBe("tr");
+        expect(chooseLanguage(available, { noteDefault: "Turkish", lastUsed: "en" }, languages)).toBe("en");
+        expect(chooseLanguage(available, { noteDefault: "Turkish", defaultLanguage: "en" }, languages)).toBe("tr");
         expect(chooseLanguage(available, { lastUsed: "en", defaultLanguage: "tr" }, languages)).toBe("en");
         expect(chooseLanguage(available, { defaultLanguage: "English" }, languages)).toBe("en");
     });

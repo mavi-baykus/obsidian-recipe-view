@@ -104,6 +104,18 @@ export function isBoldLabel(el: Element): boolean {
     return !!bold && (bold.textContent || "").trim().length > 0;
 }
 
+/**
+ * Whether an element is a paragraph starting with a line of only bold text, like
+ * "**Notes**" followed by more text on the next line
+ */
+export function startsWithBoldLine(el: Element): boolean {
+    if (el.nodeName != "P") return false;
+    const nodes = Array.from(el.childNodes).filter(
+        (n) => !(n.nodeType == Node.TEXT_NODE && /^[\s:]*$/.test(n.textContent || ""))
+    );
+    return nodes.length > 1 && ["STRONG", "B"].includes(nodes[0].nodeName) && nodes[1].nodeName == "BR";
+}
+
 function headingLevel(el: Element): number | null {
     const match = el.nodeName.match(/^H([1-6])$/);
     return match ? parseInt(match[1]) : null;
@@ -247,8 +259,16 @@ function translatableItems(block: RecipeBlock): [TranslatableKind, HTMLElement[]
 
 /** A run of language sections under one heading, e.g. "**Türkçe**" then "**English**" */
 interface LanguageGroup {
-    /** For each language: its label block, and its ingredients and steps in order */
-    languages: Map<string, { label: RecipeBlock; items: Record<TranslatableKind, HTMLElement[]> }>;
+    /**
+     * For each language: its label block, its ingredients and steps in order, the column
+     * its items are in, and how many sub-headings (like "**Dough**") it has
+     */
+    languages: Map<string, {
+        label: RecipeBlock;
+        items: Record<TranslatableKind, HTMLElement[]>;
+        itemColumn?: RecipeColumn;
+        subLabels: number;
+    }>;
 }
 
 /**
@@ -256,38 +276,62 @@ interface LanguageGroup {
  * each language by position.
  *
  * A language section starts at a label naming a language: a bold paragraph, or a heading
- * of any level. It runs until the next language label, or a heading that ends it: a
- * level 1-3 heading for a bold label, or a heading of the same or a higher level for a
- * heading label. Sections split by horizontal rules also end it.
+ * of any level. It runs until the next language label, or a heading that ends it: for a
+ * bold label, a heading of the same or a higher level than the heading it is under (e.g.
+ * "### Directions" after "### Ingredients"); for a heading label, a heading of the same
+ * or a higher level. Sections split by horizontal rules also end it.
+ *
+ * A bold sub-heading in the last language that the other languages don't have, like a
+ * "**Notes**" after the English steps, ends the section too: it is shared by all languages.
+ * That includes a paragraph starting with a bold line, as "**Notes**" followed directly by
+ * text is rendered.
  */
 function assignLanguages(model: RecipeModel, languages: LanguageConfig[]) {
     const groups: LanguageGroup[] = [];
 
     for (const section of model.sections) {
         let current: { lang: string; endLevel: number; group: LanguageGroup } | null = null;
+        // Level of the last section heading, which bold language labels sit under
+        let headingLevel = LABEL_HEADING_LEVEL - 1;
         for (const block of section.blocks) {
             const isHeading = block.kind == "heading" || block.kind == "label";
             const lang = isHeading ? matchLanguage(block.elements[0].textContent || "", languages) : null;
             if (lang) {
                 const group: LanguageGroup = current?.group || { languages: new Map() };
                 if (!current) groups.push(group);
-                current = { lang, endLevel: block.level || LABEL_HEADING_LEVEL - 1, group };
+                const endLevel: number = block.level || current?.endLevel || headingLevel;
+                current = { lang, endLevel, group };
                 block.lang = lang;
                 block.languageLabel = true;
                 if (!model.languages.includes(lang)) model.languages.push(lang);
                 if (!group.languages.has(lang)) {
-                    group.languages.set(lang, { label: block, items: { ingredients: [], steps: [] } });
+                    group.languages.set(lang, { label: block, items: { ingredients: [], steps: [] }, subLabels: 0 });
                 }
                 continue;
             }
             if (current && isHeading && block.level && block.level <= current.endLevel) {
                 current = null;
             }
+            const isBoldSubHeading = (block.kind == "label" && !block.level) ||
+                (block.kind == "paragraphs" && startsWithBoldLine(block.elements[0]));
+            if (current && isBoldSubHeading) {
+                // A bold sub-heading the other languages don't have is shared by all of them
+                const others = Array.from(current.group.languages.entries()).filter(([l]) => l != current?.lang);
+                const mine = current.group.languages.get(current.lang);
+                if (mine && others.length > 0 && mine.subLabels >= Math.max(...others.map(([, o]) => o.subLabels))) {
+                    current = null;
+                } else if (mine) {
+                    mine.subLabels++;
+                }
+            }
+            if (block.kind == "heading" && block.level) headingLevel = block.level;
             if (!current) continue;
             block.lang = current.lang;
             const items = translatableItems(block);
-            if (items) {
-                current.group.languages.get(current.lang)!.items[items[0]].push(...items[1]);
+            const language = current.group.languages.get(current.lang);
+            if (items && language) {
+                language.items[items[0]].push(...items[1]);
+                language.itemColumn ??= block.column;
             }
         }
     }
@@ -313,7 +357,8 @@ function assignLanguages(model: RecipeModel, languages: LanguageConfig[]) {
                         label: l.label,
                         warning: {
                             kind: "warning",
-                            column: l.label.column,
+                            // Next to the items, which may be in the side column when the label isn't
+                            column: l.itemColumn || l.label.column,
                             elements: [],
                             origIndex: l.label.origIndex + 0.5,
                             lang,
