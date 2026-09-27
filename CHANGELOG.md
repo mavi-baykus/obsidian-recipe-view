@@ -2,6 +2,12 @@
 
 Each version's section is used as the notes of its GitHub release.
 
+## Unreleased
+
+**Bilingual recipes**
+- Headings shared by all languages, like "Ingredients", are shown in the selected language,
+  e.g. "Malzemeler". Set them in the new *Heading translations* setting.
+
 ## 0.4.0
 
 First release of this fork ([mavi-baykus/obsidian-recipe-view](https://github.com/mavi-baykus/obsidian-recipe-view)).

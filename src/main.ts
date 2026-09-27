@@ -24,6 +24,7 @@ interface RecipeViewPluginSettings {
 	hiddenInlineCode: string;
 	extraUnits: string;
 	languages: string;
+	headingTranslations: string;
 	defaultLanguage: string;
 	openLanguage: OpenLanguageMode;
 	revealButtons: RevealButtonsMode;
@@ -44,6 +45,7 @@ const DEFAULT_SETTINGS: RecipeViewPluginSettings = {
 	hiddenInlineCode: "button-RecipeView",
 	extraUnits: "",
 	languages: "en: English, İngilizce\ntr: Türkçe, Turkish",
+	headingTranslations: "Ingredients | Malzemeler\nDirections | Hazırlanışı\nNotes | Notlar",
 	defaultLanguage: "",
 	openLanguage: "last",
 	revealButtons: "all",
@@ -398,6 +400,17 @@ class RecipeViewSettingsTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.languages)
 				.onChange(async (value) => {
 					this.plugin.settings.languages = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Heading translations')
+			.setDesc('Headings shared by all languages, like "Ingredients", are shown in the selected language. One heading per line, with its names separated by "|" in the same order as the languages above, e.g. "Ingredients | Malzemeler".')
+			.addTextArea(text => text
+				.setPlaceholder('Ingredients | Malzemeler\nDirections | Hazırlanışı')
+				.setValue(this.plugin.settings.headingTranslations)
+				.onChange(async (value) => {
+					this.plugin.settings.headingTranslations = value;
 					await this.plugin.saveSettings();
 				}));
 

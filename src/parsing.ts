@@ -11,6 +11,8 @@ import { parseList } from "./helpers";
 import { RecipeBlock, Translation, buildRecipeModel } from "./model";
 import { languageName, parseLanguages } from "./languages";
 import LanguageWarning from "./LanguageWarning.svelte";
+import TranslatedHeading from "./TranslatedHeading.svelte";
+import { HeadingNames, headingTranslation, parseHeadingTranslations } from "./headings";
 import ScaledQuantity from "./ScaledQuantity.svelte";
 import { ComponentType } from "svelte";
 
@@ -122,7 +124,7 @@ function injectQuantities(parsedRecipe: ParsedRecipe, extraUnits: string[]) {
 }
 
 function blockToComponent(
-    block: RecipeBlock, plugin: RecipeViewPlugin, radioName: string
+    block: RecipeBlock, plugin: RecipeViewPlugin, radioName: string, headings: HeadingNames[]
 ): ParsedRecipeComponent {
     const [item] = block.elements;
     switch (block.kind) {
@@ -161,13 +163,23 @@ function blockToComponent(
                 origIndex: block.origIndex,
             };
         }
-        default:
-            // Headings, sub-heading labels and anything else are shown as they are
+        default: {
+            // Headings shared by all languages are shown in the selected language
+            const heading = headingTranslation(block, headings);
+            if (heading) {
+                return {
+                    type: TranslatedHeading,
+                    props: { childNodesOf: item, asTag: item.nodeName, heading },
+                    origIndex: block.origIndex,
+                };
+            }
+            // Other headings, sub-heading labels and anything else are shown as they are
             return {
                 type: RecipeLeaf,
                 props: { childNodesOf: item, asTag: item.nodeName },
                 origIndex: block.origIndex,
             };
+        }
     }
 }
 
@@ -210,6 +222,9 @@ export function parseRecipeMarkdown(
     result.thumbnailPath = model.thumbnailPath;
     result.languages = model.languages.map((code) => ({ code, name: languageName(code, languages) }));
     result.translations = model.translations;
+    const headings = model.languages.length > 1
+        ? parseHeadingTranslations(plugin.settings.headingTranslations, languages)
+        : [];
     result.sections = model.sections.map((section) => {
         const parsed: ParsedRecipeSection = {
             containsHeader: section.containsHeader,
@@ -218,7 +233,7 @@ export function parseRecipeMarkdown(
         };
         for (const block of section.blocks) {
             const components = block.column == "side" ? parsed.sideComponents : parsed.mainComponents;
-            const component = blockToComponent(block, plugin, radioName);
+            const component = blockToComponent(block, plugin, radioName, headings);
             if (block.lang) component.lang = block.lang;
             if (block.languageLabel) component.languageLabel = true;
             components.push(component);

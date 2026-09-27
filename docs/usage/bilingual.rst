@@ -30,6 +30,19 @@ A language's section runs until the next language label or the next section head
 
 Ingredients and steps are matched between languages by position: the third ingredient in Türkçe goes with the third in English. Sub-headings inside a language, like ``**Dough**``, are fine. If the number of ingredients (or steps) differs between languages, they can't be matched, and a warning is shown instead of translation buttons.
 
+Shared headings
+***************
+
+Headings shared by all languages, like ``### Ingredients`` above, are shown in the selected language. The *Heading translations* setting lists them, one heading per line, with its names separated by ``|`` in the same order as the *Languages* setting:
+
+.. code-block:: text
+
+    Ingredients | Malzemeler
+    Directions | Hazırlanışı
+    Notes | Notlar
+
+Any of a heading's names can be used in the note, and case, accents and a trailing colon don't matter. Bold lines shared by all languages, like a ``**Notes**`` at the end, are translated too. With *Both* selected, headings are shown as written. The layout is still chosen from the heading as written, so the *Side column regex* setting doesn't need the other names.
+
 Choosing a language
 *******************
 
