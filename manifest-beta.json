@@ -1,8 +1,8 @@
 {
 	"id": "recipe-view",
 	"name": "Recipe view",
-	"version": "0.3.6",
-	"minAppVersion": "0.15.0",
+	"version": "0.4.0",
+	"minAppVersion": "1.4.4",
 	"description": "View your notes as interactive recipe cards while you cook.",
 	"author": "lachholden",
 	"authorUrl": "https://github.com/lachholden",

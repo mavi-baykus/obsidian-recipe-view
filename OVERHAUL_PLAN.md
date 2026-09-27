@@ -235,7 +235,7 @@ Each phase can be shipped on its own and keeps build, tests and lint green.
 | 3 | Parsing split (model → components) and bold labels as sub-headings. No other visible change. | M | ✅ Done (`src/model.ts`; `####`–`######` headings are sub-headings too) |
 | 4 | **Bilingual:** language settings, detection and pairing, language in view state and per-language commands, switcher, reveal UI, synced check/step state | L | ✅ Done (docs/usage/bilingual.rst) |
 | 5 | Native in-note toggle token (Reading view, Live Preview and recipe view) with `button-RecipeView` alias | M | |
-| 6 | Docs, version bump to 0.4.0, tagged release so the fork can be installed with BRAT | S | |
+| 6 | Docs, version bump to 0.4.0, tagged release so the fork can be installed with BRAT | S | ✅ Done (CHANGELOG.md; the release workflow publishes, and tags with a `-` are pre-releases) |
 | 7 | **Heading translations** (section 7.1) | S | |
 | 8 | **Made button**, keeping the cooking state when only properties change (7.2, 7.3) | S–M | |
 | 9 | **Timers**: panel, alarm, screen kept on, durations (7.4) | L | |

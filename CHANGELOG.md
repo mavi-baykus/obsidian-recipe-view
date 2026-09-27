@@ -1,0 +1,44 @@
+# Changelog
+
+Each version's section is used as the notes of its GitHub release.
+
+## 0.4.0
+
+First release of this fork ([mavi-baykus/obsidian-recipe-view](https://github.com/mavi-baykus/obsidian-recipe-view)).
+It is installed with [BRAT](https://github.com/TfTHacker/obsidian42-brat). It uses the same plugin
+id as the original, so it replaces it and keeps its settings.
+
+**Switching between note and recipe view**
+- "Open as note" buttons in the recipe view header and next to the recipe title, and an
+  "Open as recipe" button in the header of recipe notes (by tag or folder).
+- Going back to the note restores the mode it was in (Reading view, Live Preview or Source
+  mode) and its cursor and scroll position, or a mode set in the settings.
+- Inline code tokens can be hidden in recipe view. By default this is `button-RecipeView`: the
+  Buttons plugin's inline buttons fail with "Could not get Active View" there.
+- The card re-renders when the note changes, keeping the scale.
+
+**Bilingual recipes**
+- Label ingredients and steps by language with a bold line or heading, such as `**Türkçe**`
+  and `**English**`, and recipe view shows one language at a time.
+- A language switcher under *Scale recipe*. A translate button beside each ingredient and
+  step shows the other language underneath. *Show all translations*, and the keys `t` and `T`.
+- Crossed-out ingredients and the selected step carry over when switching language.
+- The recipe opens in the language last chosen for it. Otherwise it uses its
+  `recipe-language` property, then the default language. There's also an option to ask
+  every time, and an "Open recipe view in …" command for each language.
+- A warning is shown when the languages have different numbers of ingredients or steps.
+
+**Formatting**
+- Paragraphs that are only bold text (e.g. `**Dough**`) and `####`–`######` headings are
+  sub-headings. They are no longer selectable steps.
+- Ordered step lists keep their start number (e.g. a list starting at 8).
+- Option to show bullets on ingredients in the two-column layout.
+
+**Quantities**
+- Fixes `2½` scaling as `10 ½`. Turkish letters are no longer decomposed.
+- Both ends of ranges scale (`1-2`, `520–585 g`, `2 to 3`).
+- Turkish units (`su bardağı`, `yemek kaşığı`, `çay kaşığı`, …), `gr` and `lt`, and an
+  *Additional units* setting.
+- Units no longer match the start of words, and the double space in `6 ounces` is gone.
+
+Requires Obsidian 1.4.4 or newer.

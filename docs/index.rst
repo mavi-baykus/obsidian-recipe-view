@@ -11,9 +11,15 @@ Store, write, and manage your recipes in as regular Obsidian notes in **portable
 Plugin installation
 ===================
 
-This plugin can be installed using the usual Obsidian community plugins `here <obsidian://show-plugin?id=recipe-view>`_.
+This documentation is for the fork at `mavi-baykus/obsidian-recipe-view <https://github.com/mavi-baykus/obsidian-recipe-view>`_, which is installed with `BRAT <https://github.com/TfTHacker/obsidian42-brat>`_:
 
-Beta versions can also be installed using `BRAT <https://github.com/TfTHacker/obsidian42-brat>`_ Just add the URL ``https://github.com/lachholden/obsidian-recipe-view`` as a beta plugin.
+1. In Obsidian, open **Settings → Community plugins → Browse**, then install and enable **BRAT**.
+2. In BRAT's settings, choose **Add beta plugin**, enter ``mavi-baykus/obsidian-recipe-view``, and choose **Add plugin**.
+3. Turn on **Recipe view** under **Settings → Community plugins** if it isn't already on.
+
+The fork uses the same plugin id as the original, so it replaces the original plugin and keeps its settings. BRAT updates it when Obsidian starts, if *Auto-update plugins at startup* is on in BRAT's settings.
+
+The original plugin can be installed from the Obsidian community plugins `here <obsidian://show-plugin?id=recipe-view>`_.
 
 Activating the recipe view
 ==========================
