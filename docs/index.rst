@@ -36,4 +36,5 @@ More details
    usage/formatting
    usage/scaling
    usage/bilingual
+   usage/timers
    usage/shortcuts

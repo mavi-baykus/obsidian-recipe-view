@@ -9,10 +9,19 @@ import { ReturnMode, isRecipeNote, markdownModeForReturn, parseList, pickMarkdow
 import { parseLanguages } from './languages';
 import { LanguageModal } from './language-modal';
 import { MadeChange, MadeProperties, localDate, markMade, undoMarkMade } from './made';
+import { TimerManager } from './timer-manager';
+import { nextTimerLabel } from './timer-state';
+import { parseDuration } from './durations';
+import { get } from 'svelte/store';
 
 type HeaderButtonMode = "recipes" | "all" | "off";
 type OpenLanguageMode = "last" | "default" | "ask";
 type RevealButtonsMode = "all" | "selected";
+export type TimerPosition = "ingredients" | "directions";
+export type TimerSize = "small" | "medium" | "large";
+
+/** The label of a timer set from the recipe's cook time */
+const COOK_TIME_LABEL = "Cook time";
 
 interface RecipeViewPluginSettings {
 	sideColumnRegex: string;
@@ -37,6 +46,11 @@ interface RecipeViewPluginSettings {
 	madeProperty: string;
 	lastMadeProperty: string;
 	previouslyMadeProperty: string;
+	timerPosition: TimerPosition;
+	timerSize: TimerSize;
+	cookTimeProperty: string;
+	timerSound: boolean;
+	keepScreenOn: boolean;
 }
 
 const DEFAULT_SETTINGS: RecipeViewPluginSettings = {
@@ -61,6 +75,11 @@ const DEFAULT_SETTINGS: RecipeViewPluginSettings = {
 	madeProperty: "made",
 	lastMadeProperty: "last made",
 	previouslyMadeProperty: "previously made",
+	timerPosition: "ingredients",
+	timerSize: "medium",
+	cookTimeProperty: "cook time (hh:mm)",
+	timerSound: true,
+	keepScreenOn: true,
 }
 
 export default class RecipeViewPlugin extends Plugin {
@@ -68,6 +87,8 @@ export default class RecipeViewPlugin extends Plugin {
 
 	// "Open as recipe" buttons added to the header of markdown views
 	headerActions = new Map<MarkdownView, HTMLElement>();
+
+	timers!: TimerManager;
 
 	// Ids of the "Open recipe view in <language>" commands
 	languageCommandIds: string[] = [];
@@ -77,6 +98,14 @@ export default class RecipeViewPlugin extends Plugin {
 		await this.loadSettings();
 
 		this.registerView(VIEW_TYPE_RECIPE, (leaf) => new RecipeView(leaf, this));
+
+		this.timers = new TimerManager(
+			this.app,
+			() => ({ sound: this.settings.timerSound, keepScreenOn: this.settings.keepScreenOn }),
+			this.addStatusBarItem(),
+		);
+		this.timers.load();
+		this.registerInterval(window.setInterval(() => this.timers.tick(), 250));
 
 		addIcon("recipe-whisk", WHISK_SVG)
 		this.addRibbonIcon("recipe-whisk", "Toggle recipe view", () => {
@@ -108,6 +137,27 @@ export default class RecipeViewPlugin extends Plugin {
 				const file = this.madeCommandFile();
 				if (!file) return false;
 				if (!checking) this.markMade(file);
+				return true;
+			},
+		});
+
+		this.addCommand({
+			id: "add-recipe-timer",
+			name: "Add a timer",
+			checkCallback: (checking) => {
+				const view = this.app.workspace.getActiveViewOfType(RecipeView);
+				if (!view?.file) return false;
+				if (!checking) this.addRecipeTimer(view.file);
+				return true;
+			},
+		});
+
+		this.addCommand({
+			id: "dismiss-timer-alarms",
+			name: "Dismiss timer alarms",
+			checkCallback: (checking) => {
+				if (!this.timers.hasRinging()) return false;
+				if (!checking) this.timers.dismissAll();
 				return true;
 			},
 		});
@@ -144,6 +194,7 @@ export default class RecipeViewPlugin extends Plugin {
 	}
 
 	onunload() {
+		this.timers.destroy();
 		this.headerActions.forEach((el) => el.remove());
 		this.headerActions.clear();
 	}
@@ -195,6 +246,28 @@ export default class RecipeViewPlugin extends Plugin {
 				this.headerActions.delete(view);
 			}
 		});
+	}
+
+	/**
+	 * Add a timer for a recipe, set but not started: to the recipe's cook time, if it has
+	 * one and there's no cook time timer for it yet, otherwise to the last time used
+	 */
+	addRecipeTimer(file: TFile) {
+		const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter || {};
+		const property = this.settings.cookTimeProperty.trim().toLowerCase();
+		const key = property ? Object.keys(frontmatter).find((k) => k.toLowerCase() == property) : undefined;
+		const value = key ? frontmatter[key] : null;
+		const timers = get(this.timers.timers);
+		const hasCookTimer = timers.some((t) => t.path == file.path && t.label == COOK_TIME_LABEL);
+		if (value !== null && value !== undefined && String(value).trim() != "" && !hasCookTimer) {
+			const seconds = parseDuration(value, "h:mm");
+			if (seconds) {
+				this.timers.add({ label: COOK_TIME_LABEL, path: file.path, seconds });
+				return;
+			}
+			new Notice(`Couldn't read the cook time "${value}". Use a time like 01:30 or 1 h 30 min.`);
+		}
+		this.timers.add({ label: nextTimerLabel(timers), path: file.path, seconds: this.timers.lastSeconds });
 	}
 
 	/** The recipe "Mark recipe as made" applies to: in recipe view, or a recipe note */
@@ -578,6 +651,70 @@ class RecipeViewSettingsTab extends PluginSettingTab {
 		madeProperty('"Made" property', 'A checkbox, checked when the recipe is marked as made.', "madeProperty");
 		madeProperty('"Last made" property', 'A date, set to the day the recipe was last made.', "lastMadeProperty");
 		madeProperty('"Previously made" property', 'A list of the days the recipe was made. Each day is added once.', "previouslyMadeProperty");
+
+		new Setting(containerEl).setName("Timers").setHeading()
+
+		new Setting(containerEl)
+			.setName('Timer position')
+			.setDesc('Where timers are shown in the recipe card. They stay at the top of the column while it scrolls. With one column, they stay at the top of the card.')
+			.addDropdown(dropdown => dropdown
+				.addOption("ingredients", "Top of the ingredients column")
+				.addOption("directions", "Top of the directions column")
+				.setValue(this.plugin.settings.timerPosition)
+				.onChange(async (value) => {
+					this.plugin.settings.timerPosition = value as TimerPosition;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Timer size')
+			.addDropdown(dropdown => dropdown
+				.addOption("small", "Small")
+				.addOption("medium", "Medium")
+				.addOption("large", "Large")
+				.setValue(this.plugin.settings.timerSize)
+				.onChange(async (value) => {
+					this.plugin.settings.timerSize = value as TimerSize;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Cook time property')
+			.setDesc('A new timer is set to this property\'s time, like "01:30" (1 hour 30 minutes), "1 h 30 min" or "90" (minutes).')
+			.addText(text => text
+				.setPlaceholder(DEFAULT_SETTINGS.cookTimeProperty)
+				.setValue(this.plugin.settings.cookTimeProperty)
+				.onChange(async (value) => {
+					this.plugin.settings.cookTimeProperty = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Alarm sound')
+			.setDesc('Beep until the alarm is dismissed, as well as showing a notice.')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.timerSound)
+				.onChange(async (value) => {
+					this.plugin.settings.timerSound = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Keep the screen on while a timer runs')
+			.setDesc('On phones and tablets, Obsidian is paused when the screen locks, so an alarm can only sound once you come back to it.')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.keepScreenOn)
+				.onChange(async (value) => {
+					this.plugin.settings.keepScreenOn = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Test the alarm')
+			.setDesc('Starts a 5 second timer, and says whether the screen can be kept on on this device.')
+			.addButton(button => button
+				.setButtonText("Test alarm")
+				.onClick(() => this.plugin.timers.test()));
 
 		new Setting(containerEl)
 			.setName("Recipe card appearance")

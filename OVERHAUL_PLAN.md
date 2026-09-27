@@ -238,7 +238,7 @@ Each phase can be shipped on its own and keeps build, tests and lint green.
 | 6 | Docs, version bump to 0.4.0, tagged release so the fork can be installed with BRAT | S | ✅ Done (CHANGELOG.md; the release workflow publishes, and tags with a `-` are pre-releases) |
 | 7 | **Heading translations** (section 7.1) | S | ✅ Done (`src/headings.ts`, `TranslatedHeading.svelte`) |
 | 8 | **Made button**, keeping the cooking state when only properties change (7.2, 7.3) | S–M | ✅ Done (`src/made.ts`, `MadeButton.svelte`; the button sits at the end of the main column, after any Notes) |
-| 9 | **Timers**: panel, alarm, screen kept on, durations (7.4) | L | |
+| 9 | **Timers**: panel, alarm, screen kept on, durations (7.4) | L | ✅ Done on desktop; needs checking on iPhone and iPad (`src/durations.ts`, `timer-state.ts`, `timer-manager.ts`, `alarm.ts`, `keep-awake.ts`) |
 | 10 | **Clickable times** in ingredients and steps (7.5) | M | |
 
 Phases 1 and 2 were checked in Obsidian 1.13.7 with the Buttons plugin (0.9.13) and both
@@ -517,6 +517,19 @@ cook time" note.
 | 10 | Clickable times in ingredients and steps (7.5) | M |
 
 The suggested order is 7 → 8 → 9 → 10.
+
+**Changes from the design while building phase 9**
+- Timers are saved in the device's local storage, not the plugin data, which can sync between
+  devices and would make one device ring for another's timers.
+- A time typed into a timer reads `12:00` as minutes and seconds, like the timer shows it.
+  The cook time property keeps reading `01:30` as hours and minutes.
+- The panel sits below the title in the directions column, and below *Scale recipe* in the
+  ingredients column. It sticks to the top of the column once scrolled.
+- The alarm unlocks its sound by playing the silent part of the beep when you tap, mixed
+  with other apps' sound. It switches to media playback only while ringing, so a paused
+  podcast isn't stopped for good.
+- Known limit: in the layout for recipes with more than three sections, the pinned timers
+  can cover the pinned ingredients of a step.
 
 **Testing**
 

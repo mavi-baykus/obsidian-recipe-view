@@ -7,6 +7,7 @@
 <div class="recipe-card two-column">
 	<div class="column column-side">
 		<slot name="scaleselector" />
+		<slot name="timers-side" />
 		{#each sideColumnComponents as c (c)}
 			<svelte:component this={c.type} {...c.props} />
 		{/each}
@@ -15,6 +16,7 @@
 		<div class="split-step split-step-title">
 			<slot name="titleblock" />
 		</div>
+		<slot name="timers-main" />
 		{#each mainColumnSections as mainColumnComponents}
 			<div
 				class="split-step"
@@ -72,7 +74,7 @@
 		background-color: transparent !important;
 	}
 
-	.split-step:nth-child(odd) {
+	.split-step:nth-child(odd of .split-step) {
 		background-color: var(--background-secondary);
 	}
 

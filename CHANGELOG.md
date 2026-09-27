@@ -2,6 +2,23 @@
 
 Each version's section is used as the notes of its GitHub release.
 
+## 0.5.0-beta.2
+
+Test build with timers, to try on phones and tablets.
+
+**Timers**
+- A *Timer* button under *Scale recipe*, and an *Add a timer* command. The first timer is set
+  to the recipe's `cook time (hh:mm)` property, read from many formats (01:30, 1 h 30 min,
+  90, 1,5 saat, PT1H30M, …).
+- Several timers at once, shown at the top of the ingredients or directions column and kept
+  there while it scrolls. Start, pause, −1, +1 and +5 minutes, or click the time to type one.
+- When a timer finishes it flashes, shows a notice and beeps until dismissed. *+1 min*
+  snoozes it.
+- Timers keep running across re-renders, language and layout changes, and leaving the recipe,
+  and are saved on each device. The screen is kept on while a timer runs.
+- Settings for the position, size, sound, keeping the screen on and the cook time property,
+  and a *Test alarm* button.
+
 ## 0.5.0-beta.1
 
 Test build of the next version, installed by BRAT like 0.4.0.

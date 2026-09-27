@@ -12,6 +12,7 @@
 			<slot name="scaleselector" />
 		</div>
 	</div>
+	<slot name="timers" />
 	{#if sections}
 		{#each sections as section}
 			<div class="split-step">
@@ -49,7 +50,7 @@
 		padding-block: calc(var(--file-margins) / 2);
 	}
 
-	.split-step:nth-child(odd) {
+	.split-step:nth-child(odd of .split-step) {
 		background-color: var(--background-secondary);
 	}
 

@@ -11,6 +11,7 @@
 			<slot name="scaleselector" />
 		</div>
 	</div>
+	<slot name="timers" />
 	{#if sections}
 		{#each sections as section}
 			<div class="split-step" class:only-step={sections.length == 1}>
@@ -46,7 +47,7 @@
 		background-color: transparent !important;
 	}
 
-	.split-step:nth-child(odd) {
+	.split-step:nth-child(odd of .split-step) {
 		background-color: var(--background-secondary);
 	}
 	.split-step.only-step {

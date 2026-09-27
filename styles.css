@@ -34,3 +34,14 @@ settings:
 .notice .recipe-made-undo {
   margin-inline-start: var(--size-4-2);
 }
+
+/* The notice when a recipe timer finishes */
+.notice .recipe-timer-notice-recipe,
+.notice .recipe-timer-notice-hint {
+  font-size: var(--font-ui-smaller);
+  opacity: 0.8;
+}
+
+.notice .recipe-timer-notice-warning:empty {
+  display: none;
+}

@@ -8,6 +8,7 @@
 	import RecipeToolbar from "./RecipeToolbar.svelte";
 	import LanguageWarning from "./LanguageWarning.svelte";
 	import MadeButton from "./MadeButton.svelte";
+	import TimerPanel from "./TimerPanel.svelte";
 	import { ALL_LANGUAGES } from "./languages";
 	import { LANGUAGE_CONTEXT, LanguageContext } from "./recipe-context";
 	import Fraction from "fraction.js";
@@ -104,6 +105,12 @@
 	const showMadeButton = view.plugin.settings.madeButton;
 	const madeProperties = view.plugin.madeProperties();
 	const markMade = () => view.plugin.markMade(file);
+
+	// Timers, at the top of the ingredients or directions column
+	const timers = view.plugin.timers;
+	const timerPosition = view.plugin.settings.timerPosition;
+	const timerSize = view.plugin.settings.timerSize;
+	const addTimer = () => view.plugin.addRecipeTimer(file);
 
 	// DOM searching and manipulating keyboard shortcuts
 	let container: HTMLDivElement;
@@ -235,6 +242,7 @@
 				language={languageStore}
 				languages={parsedRecipe.languages}
 				{revealAll}
+				onAddTimer={addTimer}
 			/>
 
 			<RecipeCardTitleBlock
@@ -247,6 +255,9 @@
 				{file}
 				{view}
 			/>
+			<svelte:fragment slot="timers">
+				<TimerPanel manager={timers} path={file.path} size={timerSize} onAdd={addTimer} />
+			</svelte:fragment>
 			<svelte:fragment slot="footer">
 				{#if showMadeButton}
 					<MadeButton {frontmatter} names={madeProperties} onMark={markMade} />
@@ -265,6 +276,7 @@
 				language={languageStore}
 				languages={parsedRecipe.languages}
 				{revealAll}
+				onAddTimer={addTimer}
 			/>
 
 			<RecipeCardTitleBlock
@@ -277,6 +289,16 @@
 				{file}
 				{view}
 			/>
+			<svelte:fragment slot="timers-side">
+				{#if timerPosition == "ingredients"}
+					<TimerPanel manager={timers} path={file.path} size={timerSize} onAdd={addTimer} />
+				{/if}
+			</svelte:fragment>
+			<svelte:fragment slot="timers-main">
+				{#if timerPosition == "directions"}
+					<TimerPanel manager={timers} path={file.path} size={timerSize} onAdd={addTimer} />
+				{/if}
+			</svelte:fragment>
 			<svelte:fragment slot="footer">
 				{#if showMadeButton}
 					<MadeButton {frontmatter} names={madeProperties} onMark={markMade} />
@@ -292,6 +314,7 @@
 				language={languageStore}
 				languages={parsedRecipe.languages}
 				{revealAll}
+				onAddTimer={addTimer}
 			/>
 
 			<RecipeCardTitleBlock
@@ -304,6 +327,9 @@
 				{file}
 				{view}
 			/>
+			<svelte:fragment slot="timers">
+				<TimerPanel manager={timers} path={file.path} size={timerSize} onAdd={addTimer} />
+			</svelte:fragment>
 			<svelte:fragment slot="footer">
 				{#if showMadeButton}
 					<MadeButton {frontmatter} names={madeProperties} onMark={markMade} />
