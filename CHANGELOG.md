@@ -2,7 +2,9 @@
 
 Each version's section is used as the notes of its GitHub release.
 
-## Unreleased
+## 0.5.0-beta.1
+
+Test build of the next version, installed by BRAT like 0.4.0.
 
 **Mark as made**
 - A *Mark as made* button at the end of the directions, and a *Mark recipe as made* command.
