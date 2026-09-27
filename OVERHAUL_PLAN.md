@@ -248,9 +248,19 @@ button in Live Preview, keeping the cursor and scroll position), hides the dead 
 and scales correctly.
 
 **Distribution:** keep the manifest id `recipe-view` and install the fork through BRAT
-from this repo. The release workflow already builds on tags; GitHub Actions has to be
-enabled on the fork. Version 0.4.0 is newer than upstream's 0.3.6, so Obsidian's
-community updater won't overwrite it.
+from this repo. Version 0.4.0 is newer than upstream's 0.3.6, so Obsidian's community
+updater won't overwrite it.
+
+**Making a release:**
+1. Bump the version with `npm version <version> --no-git-tag-version`.
+2. Add a `## <version>` section to `CHANGELOG.md`.
+3. Push the branch.
+4. Publish a GitHub release whose new tag is the version, targeting the branch (or push
+   the tag).
+
+The release workflow then builds, tests and attaches `main.js`, `manifest.json` and
+`styles.css`. It fills in empty release notes from the changelog. GitHub Actions has to be
+enabled on the fork. This session can only push to its branch, not tags.
 
 ---
 

@@ -1,12 +1,21 @@
 name: Create release for Obsidian plugin
 
+# Runs when a version tag is pushed, or when a release is published on GitHub (which can
+# create its tag). Either way the plugin is built and attached to the release.
 on:
     push:
         tags:
             - "*"
+    release:
+        types: [published]
 
 permissions:
     contents: write
+
+# Publishing a release with a new tag triggers both events; run them one after the other
+concurrency:
+    group: release-${{ github.ref }}
+    cancel-in-progress: false
 
 jobs:
     build:
@@ -28,14 +37,22 @@ jobs:
             - run: npm ci
             - run: npm test
             - run: npm run build
-            - name: Create release
+            - name: Create the release or attach the files to it
               env:
                 GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
               run: |
                 tag="${GITHUB_REF#refs/tags/}"
                 # The release notes are this version's section of CHANGELOG.md
                 awk -v version="$tag" '/^## /{ found = ($2 == version); next } found' CHANGELOG.md > notes.md
-                # Versions like 0.5.0-beta.1 are pre-releases; BRAT installs them too
-                prerelease=""
-                if [[ "$tag" == *-* ]]; then prerelease="--prerelease"; fi
-                gh release create "$tag" --title="$tag" --notes-file notes.md $prerelease main.js manifest.json styles.css
+                if gh release view "$tag" > /dev/null 2>&1; then
+                  gh release upload "$tag" main.js manifest.json styles.css --clobber
+                  # Fill in the notes if the release was published without any
+                  if [ -z "$(gh release view "$tag" --json body --jq .body)" ]; then
+                    gh release edit "$tag" --notes-file notes.md
+                  fi
+                else
+                  # Versions like 0.5.0-beta.1 are pre-releases; BRAT installs them too
+                  prerelease=""
+                  if [[ "$tag" == *-* ]]; then prerelease="--prerelease"; fi
+                  gh release create "$tag" --title="$tag" --notes-file notes.md $prerelease main.js manifest.json styles.css
+                fi
