@@ -3,6 +3,7 @@
 Working plan for this fork. It covers the two requested changes (a working Recipe View
 toggle, and bilingual recipes) plus bugs found while testing against real recipe notes
 (`Cinnamon Rolls.md`, `Ezogelin Çorbası.md`).
+Section 7 covers the second round: Turkish headings, a "Made" button and timers.
 
 **Starting point:** this fork's `master` is identical to upstream `lachsh/obsidian-recipe-view`
 `master` (v0.3.6, May 2024). `npm run build`, `npm test` (31 tests) and `npm run lint`
@@ -235,6 +236,10 @@ Each phase can be shipped on its own and keeps build, tests and lint green.
 | 4 | **Bilingual:** language settings, detection and pairing, language in view state and per-language commands, switcher, reveal UI, synced check/step state | L | ✅ Done (docs/usage/bilingual.rst) |
 | 5 | Native in-note toggle token (Reading view, Live Preview and recipe view) with `button-RecipeView` alias | M | |
 | 6 | Docs, version bump to 0.4.0, tagged release so the fork can be installed with BRAT | S | |
+| 7 | **Heading translations** (section 7.1) | S | |
+| 8 | **Made button**, keeping the cooking state when only properties change (7.2, 7.3) | S–M | |
+| 9 | **Timers**: panel, alarm, screen kept on, durations (7.4) | L | |
+| 10 | **Clickable times** in ingredients and steps (7.5) | M | |
 
 Phases 1 and 2 were checked in Obsidian 1.13.7 with the Buttons plugin (0.9.13) and both
 recipe notes: the original build reproduced "Could not get Active View" and `10 ½`; the new
@@ -264,3 +269,255 @@ community updater won't overwrite it.
    switcher; one command per language.*
 5. **Language names**: are `Türkçe` and `English` the only labels you use, or also
    `TR` / `EN` / `Turkish`? *Default: configurable aliases, so any of them work.*
+
+---
+
+## 7. Round 2: Turkish headings, "Made" button and timers
+
+### Decisions
+
+| # | Question | Decision |
+|---|----------|----------|
+| 1 | Headings to translate | Ingredients, Directions, Notes |
+| 2 | Headings in **Both** | As written in the note |
+| 3 | Title and the plugin's own labels | Unchanged |
+| 4 | "Made" clicked twice on one day | The date isn't added again |
+| 5 | Where the Made button goes | At the end of the directions |
+| 6 | Devices | Mostly iPhone and iPad, sometimes a MacBook |
+| 7 | Timers | Several at once |
+| 8 | Tapping a time in the recipe | Sets a timer; you start it with ▶ |
+| 9 | Ranges like "10–12 minutes" | The shorter time |
+| 10 | Timer preset | A `cook time (hh:mm)` property, to be added to your template. A bare number like `90` is minutes. |
+| 11 | Alarm | Rings until dismissed |
+
+### 7.1 Heading translations
+
+- **Setting:** *Heading translations*, one heading per line, with the names in the same order as
+  the Languages setting (`en`, then `tr`):
+  ```
+  Ingredients | Malzemeler
+  Directions | Hazırlanışı
+  Notes | Notlar
+  ```
+- **What's translated:** headings and bold labels that sit outside the language sections, i.e.
+  the ones shared by both languages. With one language selected, the card shows the name for
+  that language. **Both** shows the heading as written.
+- **Matching:** the whole heading, trimmed, ignoring case, diacritics and a trailing colon.
+  Any name in a line matches, so a note with `### Malzemeler` shows "Ingredients" in English.
+  If a line has no name for the selected language, the heading shows as written.
+- **Layout:** the side column is still chosen from the heading as written, so
+  `sideColumnRegex` needs no Turkish names.
+- **Code:**
+  - `model.ts` marks shared heading and label blocks.
+  - `parsing.ts` attaches the matching line's names.
+  - A small wrapper around `RecipeLeaf` swaps the heading text for the selected language.
+
+### 7.2 Keep the cooking state when only properties change
+
+Today any change to the note re-renders the card. That includes a property change, such as
+the Made button writing the frontmatter. The re-render clears crossed-out ingredients, the
+selected step, revealed translations and the scroll position.
+
+- **Fix:** in `RecipeView`'s `metadataCache.on("changed")`, compare the note *body* (the text
+  after the frontmatter) with the last render.
+  - Body unchanged: pass the new metadata to the card with `$set({ metadata })`. That updates
+    the title block, the Made button and the cook-time preset.
+  - Body changed: re-render as today.
+- **Also covers:** editing properties in another pane, and sync updating them.
+
+### 7.3 "Made" button
+
+```
+ DIRECTIONS
+ …
+ 6. Cooking time can vary …
+
+              [ ✓ Mark as made ]        → after clicking:  [ ✓ Made today ]
+```
+
+- **Where:** at the end of the directions in every layout:
+  - two-column: after the last section of the main column;
+  - one-column: at the bottom of the card;
+  - multi-section: a final row under the main column.
+
+  Each layout gets a `footer` slot, like the existing title-block and toolbar slots.
+- **Command:** *Mark recipe as made*. It works in recipe view and in note view for recipe
+  notes, so it can also be bound to a hotkey or used from a Buttons button.
+- **What it writes** (via `app.fileManager.processFrontMatter`, which the Properties editor
+  also uses):
+
+  | Property | Change |
+  |----------|--------|
+  | `made` | `true`, whatever it was |
+  | `last made` | Today, as a local date `YYYY-MM-DD` |
+  | `previously made` | Today appended, unless it's already there. An empty value or a single date is turned into a list first. |
+
+  Missing properties are created.
+- **Feedback:**
+  - A notice, *Marked as made · 27 Sep 2026*, has an **Undo** button for 10 seconds. Undo puts
+    the three properties back exactly as they were, removing any that didn't exist.
+  - When `last made` is today, the button reads **Made today** and a click does nothing.
+- **Property types:** if `last made` or `previously made` have no type in the vault yet, set
+  them to Date and List. This uses the internal `app.metadataTypeManager`, guarded, so it's
+  skipped if that API is missing. The types can still be set by hand in the Properties editor.
+- **Settings:** the three property names. The defaults are the names above.
+- **Tests:**
+  - The frontmatter change is a pure function, `markMade(frontmatter, today, names)`,
+    unit-tested for every value shape, the same-day case, and undo.
+  - In Obsidian, check that the rest of your template's frontmatter is left unchanged.
+
+### 7.4 Timers
+
+```
+ ┌ Ingredients column (or Directions), pinned while the column scrolls ┐
+ │ Cook time          1:30:00    ▶   −1  +1  +5   ✕                   │
+ │ 3. Üzerine et su…    44:12    ⏸   −1  +1  +5   ✕                   │
+ │ 4. Düdüklüde 15…      0:00    🔔 Dismiss   +1 min                   │  ← ringing, flashing
+ │ + Timer                                                             │
+ └─────────────────────────────────────────────────────────────────────┘
+```
+
+**Adding and setting timers**
+
+- **Adding one:** a **Timer** button next to *Scale recipe*, or the *Add timer* command, adds
+  a paused timer. It's set from `cook time (hh:mm)` if the note has one and that timer isn't
+  already there; otherwise the last duration used; otherwise 10:00.
+- **Typing a time:** tap the digits and type in any of the formats below. A bare number is
+  minutes. **Enter** applies it.
+- **Adjusting:** −1 / +1 / +5 min, ▶/⏸, ✕ to remove, **+ Timer** for another one.
+- **Several at once**, each labelled:
+  - *Cook time*;
+  - the start of the step it came from;
+  - *Timer 2*, and so on, for manual ones.
+- **Tapping a time in the recipe** (see 7.5) adds a paused timer set to that time. If the
+  newest timer also came from a tap and was never started, it's replaced, so exploratory
+  taps don't pile up.
+
+**Where it shows**
+
+- **Position:** the panel sits at the top of the Ingredients or Directions column, as set in
+  the settings.
+  - Two-column: each column scrolls on its own, so the panel is `position: sticky` at the top
+    of that column.
+  - One-column and multi-section layouts: it's sticky at the top of the card.
+- **Size:** small, medium or large; scales the digits and buttons.
+- **Visibility:** the panel is hidden when there are no timers.
+
+**Surviving the things that rebuild the card**
+
+- **Where the timers live:** in the plugin, not in the card. So they survive:
+  - a re-render;
+  - a layout switch while resizing;
+  - a language switch;
+  - the Made button;
+  - switching to note view or another note;
+  - closing the recipe.
+- **Other recipes:** every recipe view shows every timer. Timers from another recipe are
+  labelled with that recipe's name.
+- **Counting:** end times are stored as clock times, so the countdown stays right after the
+  app has been paused.
+- **Restarts:** running timers are saved in the plugin data. If iOS closes Obsidian, the
+  timers come back when it reopens. One that finished while Obsidian was closed rings on
+  reopening and says how long ago it finished.
+- **Desktop:** the status bar shows the soonest running timer.
+
+**Alarm**
+
+- **What happens:**
+  - a repeating beep until dismissed;
+  - the timer flashes;
+  - a notice appears that stays until clicked;
+  - on desktop, a system notification when Obsidian isn't focused.
+- **Dismissing:** from the timer, the notice, or the *Dismiss timer alarms* command.
+  **+1 min** snoozes.
+- **Sound:** a short WAV generated in code (no sound files), played through an `<audio>`
+  element.
+  - The element is primed when you tap ▶, because iOS only allows sound that follows a tap.
+  - It plays through the media channel. Where available it also sets
+    `navigator.audioSession.type = "playback"`, so the ringer switch shouldn't mute it. This
+    must be checked on your iPhone.
+- **Keeping the screen on:** while any timer runs or rings, `navigator.wakeLock` keeps the
+  screen on. It's re-requested when Obsidian comes back to the foreground.
+  - If the API is missing, it falls back to a muted, looping, invisible video (the NoSleep
+    technique).
+  - Setting: *Keep screen on while a timer runs* (default on).
+- **Limit that can't be fixed:**
+  - If you lock the device or switch apps, iOS pauses Obsidian and the alarm can't sound
+    until you return.
+  - Keeping the screen on is what avoids this.
+- **Settings:**
+  - position (Ingredients / Directions column);
+  - size;
+  - sound on or off;
+  - the preset property name;
+  - keep screen on;
+  - a **Test alarm** button. It plays the alarm and reports whether the sound played and
+    whether the screen lock worked, so it doubles as an on-device check.
+
+**Duration formats** (`src/durations.ts`, pure, unit-tested)
+
+`parseDuration(text)` returns seconds or `null`. It's used for the property and for typed
+times. It accepts:
+
+- **Clock forms:** `01:30`, `1:30` (h:mm), `1:30:00` (h:mm:ss).
+- **Units, with or without spaces:** `1h 30m`, `1 h 30 m`, `1hr 30min`, `1 hr 30 min`,
+  `1hour 30minutes`, `1 hour 30 minutes`, `1 hour and 30 minutes`, `1h30`, `90 min`, `30m`,
+  `1 hr`, `45 sec`.
+- **Unit spellings:**
+  - English: h, hr, hrs, hour(s); m, min, mins, minute(s); s, sec, second(s).
+  - Turkish: sa, saat; dk, dk., dakika; sn, saniye.
+- **Numbers:** decimals with `.` or `,` (`1.5 h`, `1,5 saat`), fractions (`1½ hours`), and words
+  (`an hour`, `half an hour`, `yarım saat`, `bir saat`).
+- **ISO durations:** `PT1H30M`, as copied from recipe websites.
+- **Bare numbers:** `90` is 90 minutes. The property may come through as a number, in which
+  case it's also minutes.
+
+Anything else gives `null`. The timer then opens at the default with a small "couldn't read
+cook time" note.
+
+### 7.5 Clickable times in the recipe
+
+- **What's found:** `findDurations(text)` finds times in the text of ingredients, steps and
+  revealed translations. Examples:
+  - *about 45 minutes*, *45 dk.*, *15 dakika*;
+  - *10–12 minutes* and *10 to 12 minutes*, which set 10;
+  - *1 saat 15 dakika*, *1½ hours*, *30 saniye*.
+
+  Each becomes a tappable chip with a small timer icon.
+- **Avoiding false matches:**
+  - In running text the single-letter units `h`/`m`/`s` only count when attached to the
+    number (`30m`), not after a space.
+  - Clock forms like `1:30` aren't matched in text, so ratios like `1:2` are safe.
+  - Temperatures (`350°F`) and quantities are skipped.
+- **Order:** times are found before quantities, and are marked `data-qty-no-parse` so scaling
+  never changes them.
+- **Tapping a chip:** adds a paused timer, as in 7.4, and opens the panel.
+  - In an ingredient, the tap doesn't cross it out.
+  - In a step, it also selects that step.
+- **Scope:** times are found within one text node, so a time split by formatting, like
+  `**45** minutes`, isn't found. That's rare in these recipes.
+
+### 7.6 Phases
+
+| Phase | Scope | Size |
+|-------|-------|------|
+| 7 | Heading translations (7.1), with docs | S |
+| 8 | Keep the cooking state on property changes (7.2); Made button and command (7.3) | S–M |
+| 9 | Duration parser; timer panel, timers kept in the plugin and saved; alarm, screen-on and Test alarm; settings (7.4) | L |
+| 10 | Clickable times in ingredients and steps (7.5) | M |
+
+The suggested order is 7 → 8 → 9 → 10.
+
+**Testing**
+
+- **Automated:** unit tests for the parser (every format above, plus text that mustn't match,
+  in English and Turkish), time detection on your two recipes, heading matching, and
+  `markMade`.
+- **Obsidian 1.13.7 desktop:** every piece of UI, in all three layouts.
+- **Your iPhone and iPad:** only you can check these. For phase 9 there's a checklist: sound
+  with the ringer off, the screen staying on, the alarm after locking and unlocking, the
+  sticky panel while scrolling, and tapping times.
+
+**Installing test builds:** phase 6 (a tagged release, installable with BRAT) is worth doing
+before phase 9. BRAT can then update the plugin on the iPhone and iPad, without copying
+files by hand.
