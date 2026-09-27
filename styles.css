@@ -30,3 +30,7 @@ settings:
   font-size: var(--font-text-size);
   line-height: var(--line-height-tight);
 }
+/* The Undo button in the "Marked … as made" notice */
+.notice .recipe-made-undo {
+  margin-inline-start: var(--size-4-2);
+}

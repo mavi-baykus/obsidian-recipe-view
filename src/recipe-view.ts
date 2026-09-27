@@ -2,7 +2,10 @@ import RecipeViewPlugin from "./main";
 import { Component, EditableFileView, Keymap, TFile, ViewStateResult, WorkspaceLeaf } from "obsidian";
 import RecipeCard from "./RecipeCard.svelte"
 import { parseRecipeMarkdown } from "./parsing";
-import { MarkdownModeState, MarkdownPosition, parseList, pickMarkdownMode, pickMarkdownPosition, stripInlineCodeTokens } from "./helpers";
+import {
+    MarkdownModeState, MarkdownPosition, noteBody, parseList, pickMarkdownMode, pickMarkdownPosition,
+    stripInlineCodeTokens,
+} from "./helpers";
 import { ALL_LANGUAGES, chooseLanguage, parseLanguages } from "./languages";
 
 export const VIEW_TYPE_RECIPE = "recipe-view";
@@ -65,9 +68,17 @@ export class RecipeView extends EditableFileView {
 
     async onOpen() {
         this.addAction("file-text", "Open as note", () => this.plugin.setMarkdownView(this.leaf));
-        // Re-render when the note is changed elsewhere, e.g. in another pane or by sync
-        this.registerEvent(this.app.metadataCache.on("changed", (file, data) => {
-            if (file == this.file && data != this.renderedText) this.renderRecipe();
+        // Re-render when the note is changed elsewhere, e.g. in another pane or by sync. When
+        // only its properties changed, e.g. by "Mark as made", just show the new properties,
+        // keeping crossed-out ingredients, the selected step and the scroll position.
+        this.registerEvent(this.app.metadataCache.on("changed", (file, data, cache) => {
+            if (file != this.file || data == this.renderedText) return;
+            if (this.content && this.renderedText !== undefined && noteBody(data) == noteBody(this.renderedText)) {
+                this.renderedText = data;
+                this.content.$set({ metadata: cache });
+            } else {
+                this.renderRecipe();
+            }
         }));
         // These events can be registered directly as they'll be cleaned up
         // when `containerEl` goes out of scope

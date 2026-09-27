@@ -1,4 +1,6 @@
-import { App, MarkdownView, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf, addIcon, debounce, getAllTags } from 'obsidian';
+import {
+	App, MarkdownView, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf, addIcon, debounce, getAllTags,
+} from 'obsidian';
 
 import { RecipeView, VIEW_TYPE_RECIPE } from './recipe-view';
 import store from './store';
@@ -6,6 +8,7 @@ import { WHISK_SVG } from './whisk';
 import { ReturnMode, isRecipeNote, markdownModeForReturn, parseList, pickMarkdownMode, pickMarkdownPosition } from './helpers';
 import { parseLanguages } from './languages';
 import { LanguageModal } from './language-modal';
+import { MadeChange, MadeProperties, localDate, markMade, undoMarkMade } from './made';
 
 type HeaderButtonMode = "recipes" | "all" | "off";
 type OpenLanguageMode = "last" | "default" | "ask";
@@ -30,6 +33,10 @@ interface RecipeViewPluginSettings {
 	revealButtons: RevealButtonsMode;
 	/** The language last chosen for each bilingual recipe, by path */
 	lastLanguages: Record<string, string>;
+	madeButton: boolean;
+	madeProperty: string;
+	lastMadeProperty: string;
+	previouslyMadeProperty: string;
 }
 
 const DEFAULT_SETTINGS: RecipeViewPluginSettings = {
@@ -50,6 +57,10 @@ const DEFAULT_SETTINGS: RecipeViewPluginSettings = {
 	openLanguage: "last",
 	revealButtons: "all",
 	lastLanguages: {},
+	madeButton: true,
+	madeProperty: "made",
+	lastMadeProperty: "last made",
+	previouslyMadeProperty: "previously made",
 }
 
 export default class RecipeViewPlugin extends Plugin {
@@ -89,6 +100,17 @@ export default class RecipeViewPlugin extends Plugin {
 			},
 		});
 		this.registerLanguageCommands();
+
+		this.addCommand({
+			id: "mark-recipe-made",
+			name: "Mark recipe as made",
+			checkCallback: (checking) => {
+				const file = this.madeCommandFile();
+				if (!file) return false;
+				if (!checking) this.markMade(file);
+				return true;
+			},
+		});
 
 		// Keep the last chosen languages when recipes are renamed or deleted
 		this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
@@ -173,6 +195,84 @@ export default class RecipeViewPlugin extends Plugin {
 				this.headerActions.delete(view);
 			}
 		});
+	}
+
+	/** The recipe "Mark recipe as made" applies to: in recipe view, or a recipe note */
+	madeCommandFile(): TFile | null {
+		const recipeView = this.app.workspace.getActiveViewOfType(RecipeView);
+		if (recipeView) return recipeView.file;
+		const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
+		return markdownView && this.isRecipeFile(markdownView.file) ? markdownView.file : null;
+	}
+
+	madeProperties(): MadeProperties {
+		return {
+			made: this.settings.madeProperty.trim() || DEFAULT_SETTINGS.madeProperty,
+			lastMade: this.settings.lastMadeProperty.trim() || DEFAULT_SETTINGS.lastMadeProperty,
+			previouslyMade: this.settings.previouslyMadeProperty.trim() || DEFAULT_SETTINGS.previouslyMadeProperty,
+		};
+	}
+
+	/**
+	 * Record that a recipe was made today: check "made", set "last made" to today, and add
+	 * today to "previously made", with a notice to undo it
+	 */
+	async markMade(file: TFile) {
+		const names = this.madeProperties();
+		const today = localDate();
+		let change: MadeChange | null = null;
+		try {
+			await this.app.fileManager.processFrontMatter(file, (fm) => {
+				change = markMade(fm, names, today);
+				// Leave the note untouched when there's nothing to change
+				if (!change.changed) throw new NothingToChange();
+			});
+		} catch (e) {
+			if (e instanceof NothingToChange) {
+				new Notice(`${file.basename} is already marked as made today.`);
+			} else {
+				new Notice(`Couldn't mark ${file.basename} as made: ${e instanceof Error ? e.message : e}`);
+			}
+			return;
+		}
+		this.setPropertyTypes(names);
+
+		const done = change as MadeChange | null;
+		const message = createFragment((f) => {
+			const day = new Date().toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+			f.appendText(`Marked ${file.basename} as made on ${day}. `);
+			const undo = f.createEl("button", { text: "Undo", cls: "recipe-made-undo" });
+			undo.addEventListener("click", async () => {
+				if (!done) return;
+				try {
+					await this.app.fileManager.processFrontMatter(file, (fm) => undoMarkMade(fm, done));
+				} catch (e) {
+					new Notice(`Couldn't undo: ${e instanceof Error ? e.message : e}`);
+				}
+			});
+		});
+		new Notice(message, 10000);
+	}
+
+	/**
+	 * Show new "last made" and "previously made" properties as a date and a list. Uses
+	 * Obsidian's internal property types, so it's skipped if they aren't available, and
+	 * never changes a type that has already been set.
+	 */
+	setPropertyTypes(names: MadeProperties) {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const types = (this.app as any).metadataTypeManager;
+		if (typeof types?.setType != "function" || typeof types.assignedWidgets != "object") return;
+		const wanted: Array<[string, string]> = [
+			[names.made, "checkbox"],
+			[names.lastMade, "date"],
+			[names.previouslyMade, "multitext"],
+		];
+		for (const [name, type] of wanted) {
+			if (!types.assignedWidgets[name.toLowerCase()] && !types.assignedWidgets[name]) {
+				types.setType(name, type);
+			}
+		}
 	}
 
 	refreshRecipeViews = debounce(() => {
@@ -282,6 +382,9 @@ export default class RecipeViewPlugin extends Plugin {
 		this.refreshRecipeViews();
 	}
 }
+
+/** Thrown to leave a note untouched when it's already marked as made today */
+class NothingToChange extends Error {}
 
 class RecipeViewSettingsTab extends PluginSettingTab {
 	plugin: RecipeViewPlugin;
@@ -448,6 +551,33 @@ class RecipeViewSettingsTab extends PluginSettingTab {
 					this.plugin.settings.revealButtons = value as RevealButtonsMode;
 					await this.plugin.saveSettings();
 				}));
+
+		new Setting(containerEl).setName("Mark as made").setHeading()
+
+		new Setting(containerEl)
+			.setName('Show the "Mark as made" button')
+			.setDesc('At the end of the directions. It checks the "made" property, sets "last made" to today, and adds today to "previously made". The "Mark recipe as made" command does the same, in recipe view or in a recipe note.')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.madeButton)
+				.onChange(async (value) => {
+					this.plugin.settings.madeButton = value;
+					await this.plugin.saveSettings();
+				}));
+
+		const madeProperty = (name: string, desc: string, key: "madeProperty" | "lastMadeProperty" | "previouslyMadeProperty") =>
+			new Setting(containerEl)
+				.setName(name)
+				.setDesc(desc)
+				.addText(text => text
+					.setPlaceholder(DEFAULT_SETTINGS[key])
+					.setValue(this.plugin.settings[key])
+					.onChange(async (value) => {
+						this.plugin.settings[key] = value;
+						await this.plugin.saveSettings();
+					}));
+		madeProperty('"Made" property', 'A checkbox, checked when the recipe is marked as made.', "madeProperty");
+		madeProperty('"Last made" property', 'A date, set to the day the recipe was last made.', "lastMadeProperty");
+		madeProperty('"Previously made" property', 'A list of the days the recipe was made. Each day is added once.', "previouslyMadeProperty");
 
 		new Setting(containerEl)
 			.setName("Recipe card appearance")

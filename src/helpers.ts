@@ -128,3 +128,11 @@ export function stripInlineCodeTokens(text: string, tokens: string[]): string {
         })
         .join("\n");
 }
+
+/** Frontmatter at the start of a note, between "---" lines */
+const FRONTMATTER = /^---\r?\n(?:[\s\S]*?\r?\n)?---[ \t]*(?:\r?\n|$)/;
+
+/** A note's text without its frontmatter, to tell a change to its properties from one to its body */
+export function noteBody(text: string): string {
+    return text.replace(FRONTMATTER, "");
+}

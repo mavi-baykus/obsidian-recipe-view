@@ -25,6 +25,7 @@
 				{/each}
 			</div>
 		{/each}
+		<slot name="footer" />
 	</div>
 </div>
 

@@ -4,9 +4,18 @@ Each version's section is used as the notes of its GitHub release.
 
 ## Unreleased
 
+**Mark as made**
+- A *Mark as made* button at the end of the directions, and a *Mark recipe as made* command.
+  They check `made`, set `last made` to today and add today to `previously made`, creating
+  the properties if needed, with an *Undo* notice. The property names are in the settings.
+
 **Bilingual recipes**
 - Headings shared by all languages, like "Ingredients", are shown in the selected language,
   e.g. "Malzemeler". Set them in the new *Heading translations* setting.
+
+**Other**
+- Changing only a note's properties no longer redraws the recipe card, so crossed-out
+  ingredients and the selected step are kept.
 
 ## 0.4.0
 

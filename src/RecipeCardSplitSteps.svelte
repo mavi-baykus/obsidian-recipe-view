@@ -32,6 +32,12 @@
 			</div>
 		{/each}
 	{/if}
+	<div class="split-step split-step-footer">
+		<div class="column column-side" />
+		<div class="column column-main">
+			<slot name="footer" />
+		</div>
+	</div>
 </div>
 
 <style>
@@ -49,6 +55,9 @@
 
 	.split-step-title {
 		padding: var(--file-margins);
+		background-color: transparent !important;
+	}
+	.split-step-footer {
 		background-color: transparent !important;
 	}
 

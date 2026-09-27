@@ -7,6 +7,7 @@
 	import store from "./store";
 	import RecipeToolbar from "./RecipeToolbar.svelte";
 	import LanguageWarning from "./LanguageWarning.svelte";
+	import MadeButton from "./MadeButton.svelte";
 	import { ALL_LANGUAGES } from "./languages";
 	import { LANGUAGE_CONTEXT, LanguageContext } from "./recipe-context";
 	import Fraction from "fraction.js";
@@ -98,6 +99,11 @@
 	// Titleblock variables
 	$: title = parsedRecipe.title ? parsedRecipe.title : file.basename;
 	$: frontmatter = metadata?.frontmatter || {};
+
+	// "Mark as made", at the end of the directions
+	const showMadeButton = view.plugin.settings.madeButton;
+	const madeProperties = view.plugin.madeProperties();
+	const markMade = () => view.plugin.markMade(file);
 
 	// DOM searching and manipulating keyboard shortcuts
 	let container: HTMLDivElement;
@@ -241,6 +247,11 @@
 				{file}
 				{view}
 			/>
+			<svelte:fragment slot="footer">
+				{#if showMadeButton}
+					<MadeButton {frontmatter} names={madeProperties} onMark={markMade} />
+				{/if}
+			</svelte:fragment>
 		</RecipeCardOneColumn>
 	{:else if parsedRecipe?.sections.length <= 3}
 		<RecipeCardTwoColumn
@@ -266,6 +277,11 @@
 				{file}
 				{view}
 			/>
+			<svelte:fragment slot="footer">
+				{#if showMadeButton}
+					<MadeButton {frontmatter} names={madeProperties} onMark={markMade} />
+				{/if}
+			</svelte:fragment>
 		</RecipeCardTwoColumn>
 	{:else}
 		<RecipeCardSplitSteps sections={visibleSections}>
@@ -288,6 +304,11 @@
 				{file}
 				{view}
 			/>
+			<svelte:fragment slot="footer">
+				{#if showMadeButton}
+					<MadeButton {frontmatter} names={madeProperties} onMark={markMade} />
+				{/if}
+			</svelte:fragment>
 		</RecipeCardSplitSteps>
 	{/if}
 </div>

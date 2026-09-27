@@ -237,7 +237,7 @@ Each phase can be shipped on its own and keeps build, tests and lint green.
 | 5 | Native in-note toggle token (Reading view, Live Preview and recipe view) with `button-RecipeView` alias | M | |
 | 6 | Docs, version bump to 0.4.0, tagged release so the fork can be installed with BRAT | S | ✅ Done (CHANGELOG.md; the release workflow publishes, and tags with a `-` are pre-releases) |
 | 7 | **Heading translations** (section 7.1) | S | ✅ Done (`src/headings.ts`, `TranslatedHeading.svelte`) |
-| 8 | **Made button**, keeping the cooking state when only properties change (7.2, 7.3) | S–M | |
+| 8 | **Made button**, keeping the cooking state when only properties change (7.2, 7.3) | S–M | ✅ Done (`src/made.ts`, `MadeButton.svelte`; the button sits at the end of the main column, after any Notes) |
 | 9 | **Timers**: panel, alarm, screen kept on, durations (7.4) | L | |
 | 10 | **Clickable times** in ingredients and steps (7.5) | M | |
 

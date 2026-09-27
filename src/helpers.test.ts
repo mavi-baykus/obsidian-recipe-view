@@ -2,6 +2,7 @@ import { describe, expect, test } from '@jest/globals';
 import {
     isRecipeNote,
     markdownModeForReturn,
+    noteBody,
     parseList,
     pickMarkdownMode,
     pickMarkdownPosition,
@@ -125,5 +126,24 @@ describe('stripping inline code tokens', () => {
     });
     test('no tokens leaves text unchanged', () => {
         expect(stripInlineCodeTokens(note, [])).toBe(note);
+    });
+});
+
+describe('separating the note body from its frontmatter', () => {
+    test('removes the frontmatter', () => {
+        expect(noteBody("---\nmade: true\ntags:\n  - recipe\n---\n### Ingredients\n")).toBe("### Ingredients\n");
+        expect(noteBody("---\r\nmade: true\r\n---\r\nBody")).toBe("Body");
+        expect(noteBody("---\n---\nBody")).toBe("Body");
+        expect(noteBody("---\nmade: true\n---")).toBe("");
+    });
+    test('a property change leaves the body the same', () => {
+        const before = "---\nmade:\n---\n`button-RecipeView`\n\n### Ingredients";
+        const after = "---\nmade: true\nlast made: 2026-09-27\n---\n`button-RecipeView`\n\n### Ingredients";
+        expect(noteBody(after)).toBe(noteBody(before));
+    });
+    test('leaves notes without frontmatter, and later horizontal rules, alone', () => {
+        expect(noteBody("### Ingredients\n---\nmore")).toBe("### Ingredients\n---\nmore");
+        expect(noteBody("text\n---\nmade: true\n---\n")).toBe("text\n---\nmade: true\n---\n");
+        expect(noteBody("---\nnot closed")).toBe("---\nnot closed");
     });
 });
