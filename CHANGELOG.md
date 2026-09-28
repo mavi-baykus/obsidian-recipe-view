@@ -2,6 +2,17 @@
 
 Each version's section is used as the notes of its GitHub release.
 
+## 0.5.0-beta.3
+
+Fixes from trying 0.5.0-beta.2 on an iPhone.
+
+- Ingredients and steps line up with their bullets and numbers on iPhone and iPad; before, the
+  text started on the line below them. This also affected the original plugin.
+- The end of the recipe, with *Mark as made*, can be scrolled above Obsidian's floating
+  navigation bar on phones.
+- Adding or starting a timer no longer makes a short clicking sound. The alarm is now readied
+  with a moment of silence, once.
+
 ## 0.5.0-beta.2
 
 Test build with timers, to try on phones and tablets.

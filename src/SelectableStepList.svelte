@@ -121,7 +121,10 @@
 		z-index: -1;
 	}
 
+	/* A block, so iOS puts the bullet or number on the first line of the item rather than
+	   on a line of its own before it */
 	label {
+		display: block;
 		position: relative;
 	}
 

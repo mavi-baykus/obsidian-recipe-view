@@ -45,3 +45,16 @@ settings:
 .notice .recipe-timer-notice-warning:empty {
   display: none;
 }
+
+/* On phones, leave room at the end for Obsidian's floating navigation bar */
+.workspace-leaf-content[data-type="recipe-view"] .recipe-card.one-column,
+.workspace-leaf-content[data-type="recipe-view"] .recipe-card.split-steps {
+  padding-bottom: var(--view-bottom-spacing, 0px);
+}
+
+/* A spacer rather than more padding, as --file-margins can hold two values */
+.workspace-leaf-content[data-type="recipe-view"] .recipe-card.two-column .column::after {
+  content: "";
+  display: block;
+  height: var(--view-bottom-spacing, 0px);
+}

@@ -1,9 +1,10 @@
 // The alarm sound for timers: beeps generated as a WAV file, so there's no sound file to
 // ship, played through an <audio> element.
 //
-// iOS only lets a page start sound in response to a tap, so the element is unlocked when a
-// timer is started (by playing its silent part) and can then ring later on its own. While
-// ringing it asks to play as media, so the ringer switch doesn't mute it.
+// iOS only lets a page start sound in response to a tap, so the first time a timer is added
+// or started, the element plays a short silent sound (mixed with other apps' sound), which
+// lets it ring later on its own. While ringing it asks to play as media, so the ringer
+// switch doesn't mute it.
 
 const SAMPLE_RATE = 22050;
 const BEEP = 0.15;
@@ -11,15 +12,12 @@ const GAP = 0.1;
 const PAUSE = 0.7;
 const PITCH = 880;
 
-/** Where the silence after the beeps starts, in seconds */
-const SILENCE_START = 3 * BEEP + 2 * GAP;
-
-/** Three short beeps then a pause, as a 16-bit mono PCM WAV file, to play on a loop */
-export function beepWav(): ArrayBuffer {
-    const samples = Math.round((SILENCE_START + PAUSE) * SAMPLE_RATE);
+/** A 16-bit mono PCM WAV file of a number of seconds, each sample in -1 to 1 given by `at` */
+function wav(seconds: number, at: (t: number) => number): ArrayBuffer {
+    const samples = Math.round(seconds * SAMPLE_RATE);
     const buffer = new ArrayBuffer(44 + samples * 2);
     const view = new DataView(buffer);
-    const text = (at: number, s: string) => [...s].forEach((c, i) => view.setUint8(at + i, c.charCodeAt(0)));
+    const text = (offset: number, s: string) => [...s].forEach((c, i) => view.setUint8(offset + i, c.charCodeAt(0)));
     text(0, "RIFF");
     view.setUint32(4, 36 + samples * 2, true);
     text(8, "WAVE");
@@ -34,17 +32,26 @@ export function beepWav(): ArrayBuffer {
     text(36, "data");
     view.setUint32(40, samples * 2, true);
     for (let i = 0; i < samples; i++) {
-        const t = i / SAMPLE_RATE;
-        const intoBeep = t % (BEEP + GAP);
-        let sample = 0;
-        if (t < SILENCE_START && intoBeep < BEEP) {
-            // Fade in and out over 10ms so the beeps don't click
-            const envelope = Math.min(1, intoBeep / 0.01, (BEEP - intoBeep) / 0.01);
-            sample = Math.sin(2 * Math.PI * PITCH * t) * 0.7 * envelope;
-        }
-        view.setInt16(44 + i * 2, Math.round(sample * 32767), true);
+        view.setInt16(44 + i * 2, Math.round(at(i / SAMPLE_RATE) * 32767), true);
     }
     return buffer;
+}
+
+/** Three short beeps then a pause, to play on a loop */
+export function beepWav(): ArrayBuffer {
+    const beeps = 3 * BEEP + 2 * GAP;
+    return wav(beeps + PAUSE, (t) => {
+        const intoBeep = t % (BEEP + GAP);
+        if (t >= beeps || intoBeep >= BEEP) return 0;
+        // Fade in and out over 10ms so the beeps don't click
+        const envelope = Math.min(1, intoBeep / 0.01, (BEEP - intoBeep) / 0.01);
+        return Math.sin(2 * Math.PI * PITCH * t) * 0.7 * envelope;
+    });
+}
+
+/** A moment of silence, played to let the alarm ring later */
+export function silenceWav(): ArrayBuffer {
+    return wav(0.1, () => 0);
 }
 
 type AudioSessionType = "auto" | "playback" | "ambient";
@@ -63,14 +70,16 @@ function setAudioSession(type: AudioSessionType) {
 
 export class AlarmSound {
     private audio: HTMLAudioElement | null = null;
-    private url: string | null = null;
+    private beepUrl: string | null = null;
+    private silenceUrl: string | null = null;
     private ringing = false;
+    private unlocked = false;
 
     private element(): HTMLAudioElement {
         if (!this.audio) {
-            this.url = URL.createObjectURL(new Blob([beepWav()], { type: "audio/wav" }));
-            this.audio = new Audio(this.url);
-            this.audio.loop = true;
+            this.beepUrl = URL.createObjectURL(new Blob([beepWav()], { type: "audio/wav" }));
+            this.silenceUrl = URL.createObjectURL(new Blob([silenceWav()], { type: "audio/wav" }));
+            this.audio = new Audio();
             this.audio.preload = "auto";
         }
         return this.audio;
@@ -78,23 +87,20 @@ export class AlarmSound {
 
     /**
      * Call when the user taps something, e.g. to start a timer, so the alarm can play later
-     * without a tap. Plays only the silent part, mixed with other apps' sound.
+     * without a tap. Plays a moment of silence to the end, once.
      */
     unlock() {
-        if (this.ringing) return;
+        if (this.unlocked || this.ringing) return;
         const audio = this.element();
         setAudioSession("ambient");
-        audio.currentTime = SILENCE_START;
+        audio.loop = false;
+        audio.src = this.silenceUrl || "";
         audio.play()
             .then(() => {
-                if (!this.ringing) {
-                    audio.pause();
-                    audio.currentTime = 0;
-                    setAudioSession("auto");
-                }
+                this.unlocked = true;
             })
             .catch(() => {
-                // Nothing more can be done until the alarm rings
+                // Try again on the next tap
             });
     }
 
@@ -103,7 +109,8 @@ export class AlarmSound {
         const audio = this.element();
         this.ringing = true;
         setAudioSession("playback");
-        audio.currentTime = 0;
+        audio.loop = true;
+        audio.src = this.beepUrl || "";
         try {
             await audio.play();
             return true;
@@ -114,17 +121,16 @@ export class AlarmSound {
 
     stop() {
         this.ringing = false;
-        if (this.audio) {
-            this.audio.pause();
-            this.audio.currentTime = 0;
-        }
+        this.audio?.pause();
         setAudioSession("auto");
     }
 
     destroy() {
         this.stop();
-        if (this.url) URL.revokeObjectURL(this.url);
+        if (this.beepUrl) URL.revokeObjectURL(this.beepUrl);
+        if (this.silenceUrl) URL.revokeObjectURL(this.silenceUrl);
         this.audio = null;
-        this.url = null;
+        this.beepUrl = null;
+        this.silenceUrl = null;
     }
 }

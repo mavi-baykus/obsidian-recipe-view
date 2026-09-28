@@ -1,5 +1,5 @@
 import { describe, expect, test } from '@jest/globals';
-import { beepWav } from './alarm';
+import { beepWav, silenceWav } from './alarm';
 
 describe('the alarm sound', () => {
     const wav = new DataView(beepWav());
@@ -23,5 +23,10 @@ describe('the alarm sound', () => {
         expect(loud(0.02, 0.13)).toBeGreaterThan(20000);
         expect(loud(0.16, 0.24)).toBe(0);
         expect(loud(0.66, 1.34)).toBe(0);
+    });
+    test('the sound that lets it ring later is silent', () => {
+        const silence = new DataView(silenceWav());
+        expect(silence.getUint32(40, true)).toBe(silence.byteLength - 44);
+        for (let i = 44; i < silence.byteLength; i += 2) expect(silence.getInt16(i, true)).toBe(0);
     });
 });
